@@ -977,4 +977,48 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// ---------- install hint ----------
+// iOS Safari has NO install prompt for web apps, ever — the only path is
+// Share > Add to Home Screen, so show a one-time hint explaining that.
+// Chromium browsers DO fire beforeinstallprompt; capture it and offer a real
+// Install button instead.
+
+function installBanner(text, buttonLabel, onButton) {
+  const banner = el(
+    'div',
+    { class: 'install-banner' },
+    el('span', null, text),
+    onButton ? el('button', { class: 'small', onclick: onButton }, buttonLabel) : null,
+    el(
+      'button',
+      {
+        class: 'small',
+        onclick: () => {
+          store.set('installHintDismissed', '1');
+          banner.remove();
+        },
+      },
+      'Dismiss'
+    )
+  );
+  document.querySelector('main').prepend(banner);
+  return banner;
+}
+
+const isStandalone =
+  window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+if (!isStandalone && !store.get('installHintDismissed')) {
+  if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
+    installBanner('Install as app: tap Share ⬆︎ and then "Add to Home Screen".');
+  } else {
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      const banner = installBanner('This site works as an app.', 'Install', async () => {
+        banner.remove();
+        event.prompt();
+      });
+    });
+  }
+}
+
 showView(store.get('token') ? 'home' : 'login');

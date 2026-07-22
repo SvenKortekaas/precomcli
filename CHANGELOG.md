@@ -36,6 +36,10 @@ feature area rather than by a tagged release.
   meaningful.
 
 ### Added
+- Web app: install support — iOS gets the Apple meta tags for a proper
+  full-screen Home Screen app plus a one-time "tap Share → Add to Home
+  Screen" hint (iOS has no native install prompt); Chromium browsers get a
+  real Install button via `beforeinstallprompt`.
 - Web app: group members are clickable — a detail modal shows their status,
   roles, manual-toggle info, and today's hour-by-hour availability strip,
   plus a box to send them a direct message.

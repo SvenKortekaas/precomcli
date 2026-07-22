@@ -316,8 +316,10 @@ passes *through* it inside your own requests. To send messages, also set your
 sender ID (`SendBy`) under Settings — see "One-shot commands" → `message` for
 how to find it (it is *not* your user ID and the API cannot look it up).
 
-On a phone, use "Add to Home Screen" (iOS Safari) / "Install app" (Android
-Chrome) to get it as an app icon.
+On a phone, use "Add to Home Screen" (iOS Safari — tap Share ⬆︎; iOS never
+shows an install prompt of its own, so the app shows a one-time hint) /
+"Install app" (Android Chrome, where the app offers an Install button) to
+get it as a full-screen app icon.
 
 ### Self-hosting (optional)
 
