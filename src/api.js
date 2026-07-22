@@ -140,7 +140,9 @@ class PreComClient {
     return this.request('POST', '/api/User/SetAvailable');
   }
 
-  // Returns [{ Start, Duration }, ...] scheduled unavailability blocks.
+  // Returns [{ Start, Duration }, ...] scheduled AVAILABILITY (on-call)
+  // blocks — despite this endpoint's swagger summary claiming "unavailable
+  // appointments", live-confirmed the opposite on 2026-07-22 (see CLAUDE.md).
   getUserSchedulerAppointments(from, to) {
     return this.request('GET', '/api/User/GetUserSchedulerAppointments', { query: { from, to } });
   }

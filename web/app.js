@@ -91,12 +91,16 @@ async function api(method, path, { query, body, form } = {}) {
   return data;
 }
 
-// Same rule as isNotAvailable in src/render.js: the manual toggle OR a
-// scheduled block (NotAvailalbeScheduled is PreCom's own typo; the correctly
-// spelled fallback covers a possible future server-side fix).
+// Same rule as isNotAvailable in src/render.js (keep them in sync): scheduler
+// blocks are AVAILABILITY (on-call) periods, and the typo'd
+// NotAvailalbeScheduled flag is INVERTED from its name - true means a
+// scheduled availability block is active (user IS available). Unavailable
+// when the manual NotAvailable toggle is set, or when no block is active.
 function isNotAvailable(info) {
-  const scheduled = info.NotAvailalbeScheduled ?? info.NotAvailableScheduled;
-  return Boolean(info.NotAvailable) || Boolean(scheduled);
+  const scheduledAvailable = info.NotAvailalbeScheduled ?? info.NotAvailableScheduled;
+  if (info.NotAvailable) return true;
+  if (scheduledAvailable === undefined || scheduledAvailable === null) return false;
+  return !scheduledAvailable;
 }
 
 // ---------- tiny DOM helpers (no innerHTML, ever) ----------
@@ -248,7 +252,7 @@ async function loadHome() {
     el(
       'p',
       { class: 'hint' },
-      'PreCom can take a while to reflect a status change — a stale value here is usually their delay, not this app.'
+      'Availability follows your on-call roster (scheduled availability blocks) plus the manual toggle.'
     )
   );
 }

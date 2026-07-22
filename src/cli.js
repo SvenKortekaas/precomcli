@@ -81,7 +81,8 @@ PRECOM_SEND_BY, and it's cached in ~/.precomcli/config.json after that.
 "alarms" defaults to your most recent alarm; pass --msg-in-id with a
 negative/positive --previous-or-next to page backward/forward from it.
 "schedule-add"/"schedule-remove" take whole hours only (e.g. "8", not
-"8:30") for a scheduled UNAVAILABILITY block on that date.
+"8:30"). Schedule blocks are AVAILABILITY (on-call) hours: "add" marks
+you on-call for those hours, "remove" makes you unavailable for them.
 
 "schedule-recurring" only guarantees --weekly 1 (every week) and 2
 (alternating, starting this week) - PreCom's own docs say other values
@@ -308,7 +309,7 @@ async function cmdScheduleAdd(args) {
     throw new Error('Usage: precomcli schedule-add <date> <fromHour> <toHour>');
   }
   await authed().client.addUserSchedulerAppointment(date, toTimeSpan(from), toTimeSpan(to));
-  console.log(`Added unavailability block on ${date}, ${from}:00-${to}:00.`);
+  console.log(`Added availability (on-call) block on ${date}, ${from}:00-${to}:00.`);
 }
 
 async function cmdScheduleRemove(args) {
@@ -317,7 +318,7 @@ async function cmdScheduleRemove(args) {
     throw new Error('Usage: precomcli schedule-remove <date> <fromHour> <toHour>');
   }
   await authed().client.deleteUserSchedulerAppointment(date, toTimeSpan(from), toTimeSpan(to));
-  console.log(`Removed unavailability block on ${date}, ${from}:00-${to}:00.`);
+  console.log(`Removed availability block on ${date}, ${from}:00-${to}:00 — you are unavailable during those hours now.`);
 }
 
 async function cmdCapcodes(args) {

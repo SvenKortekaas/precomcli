@@ -16,25 +16,32 @@ test('receiverTypeLabel: known and unknown types', () => {
 
 // This is the exact regression that shipped to production once: NotAvailable
 // alone under-reports unavailability when only the scheduled-block flag is set.
-test('isNotAvailable: immediate toggle only', () => {
-  assert.equal(isNotAvailable({ NotAvailable: true, NotAvailalbeScheduled: false }), true);
+// NotAvailalbeScheduled semantics were decoded via a live A/B test on
+// 2026-07-22 (see CLAUDE.md): the flag is INVERTED from its name - true means
+// a scheduled availability (on-call) block is active, i.e. the user IS
+// available. Both "live-confirmed" cases below are that experiment's data.
+
+test('isNotAvailable: manual toggle wins even during an availability block', () => {
+  assert.equal(isNotAvailable({ NotAvailable: true, NotAvailalbeScheduled: true }), true);
 });
 
-test('isNotAvailable: scheduled block only (the bug case)', () => {
-  assert.equal(isNotAvailable({ NotAvailable: false, NotAvailalbeScheduled: true }), true);
+test('isNotAvailable: live-confirmed AVAILABLE (inside an on-call block)', () => {
+  assert.equal(isNotAvailable({ NotAvailable: false, NotAvailalbeScheduled: true }), false);
 });
 
-test('isNotAvailable: available when both flags false', () => {
-  assert.equal(isNotAvailable({ NotAvailable: false, NotAvailalbeScheduled: false }), false);
+test('isNotAvailable: live-confirmed NOT available (no on-call block active)', () => {
+  assert.equal(isNotAvailable({ NotAvailable: false, NotAvailalbeScheduled: false }), true);
 });
 
-test('isNotAvailable: missing fields count as available', () => {
+test('isNotAvailable: missing scheduled flag falls back to the manual toggle', () => {
   assert.equal(isNotAvailable({}), false);
+  assert.equal(isNotAvailable({ NotAvailable: true }), true);
 });
 
 test('isNotAvailable: falls back to a correctly-spelled scheduled field', () => {
   // If PreCom ever fixes the "Availalbe" typo, the corrected spelling still works.
-  assert.equal(isNotAvailable({ NotAvailable: false, NotAvailableScheduled: true }), true);
+  assert.equal(isNotAvailable({ NotAvailable: false, NotAvailableScheduled: true }), false);
+  assert.equal(isNotAvailable({ NotAvailable: false, NotAvailableScheduled: false }), true);
 });
 
 test('groupChangeSummary: days variant', () => {

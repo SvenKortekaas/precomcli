@@ -273,7 +273,7 @@ async function actionAddScheduleBlock() {
   requireAuth(data);
   const client = clientFromSession(data);
 
-  const date = await ask('Date to be unavailable (YYYY-MM-DD): ');
+  const date = await ask('Date to be available/on-call (YYYY-MM-DD): ');
   const fromHour = await ask('From hour (0-23): ');
   const toHour = await ask('To hour (0-23): ');
   if (!date || fromHour === '' || toHour === '') {
@@ -291,13 +291,13 @@ async function actionAddScheduleBlock() {
   }
 
   console.log('');
-  console.log(`About to mark yourself UNAVAILABLE on ${date} from ${fromHour}:00 to ${toHour}:00.`);
+  console.log(`About to mark yourself AVAILABLE (on-call) on ${date} from ${fromHour}:00 to ${toHour}:00.`);
   if (!(await confirm('Confirm? (y/N): '))) {
     console.log('Cancelled.');
     return;
   }
   await client.addUserSchedulerAppointment(date, fromTs, toTs);
-  console.log('Unavailability block added.');
+  console.log('Availability block added.');
 }
 
 async function actionRemoveScheduleBlock() {
@@ -309,11 +309,11 @@ async function actionRemoveScheduleBlock() {
   const inWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const appointments = await client.getUserSchedulerAppointments(today, inWeek);
   if (appointments.length === 0) {
-    console.log('No scheduled unavailability blocks in the next 7 days.');
+    console.log('No scheduled availability (on-call) blocks in the next 7 days.');
     return;
   }
   console.log('');
-  console.log('Your scheduled unavailability blocks (next 7 days):');
+  console.log('Your scheduled availability (on-call) blocks (next 7 days):');
   render.renderSchedulerAppointmentPicker(appointments);
   const pick = await ask('Enter the number of the block to remove: ');
   const selected = pickByNumber(appointments, pick, 'blocks');
@@ -352,7 +352,7 @@ async function actionRemoveScheduleBlock() {
     return;
   }
   await client.deleteUserSchedulerAppointment(date, toTimeSpan(fromHour), toTimeSpan(toHour));
-  console.log('Unavailability block removed.');
+  console.log('Availability block removed — you are unavailable during those hours now.');
 }
 
 async function actionAddRecurringSchedule() {
@@ -712,9 +712,9 @@ const MESSAGES_ITEMS = [
 const AVAILABILITY_ITEMS = [
   { key: '1', label: 'My status', action: actionStatus },
   { key: '2', label: 'Mark myself available', action: actionSetAvailable },
-  { key: '3', label: 'View scheduled unavailability', action: actionViewSchedule },
-  { key: '4', label: 'Add unavailability block', action: actionAddScheduleBlock },
-  { key: '5', label: 'Remove unavailability block', action: actionRemoveScheduleBlock },
+  { key: '3', label: 'View scheduled availability (on-call)', action: actionViewSchedule },
+  { key: '4', label: 'Add availability block', action: actionAddScheduleBlock },
+  { key: '5', label: 'Remove availability block', action: actionRemoveScheduleBlock },
   { key: '6', label: 'Add recurring schedule', action: actionAddRecurringSchedule },
   { key: '7', label: 'Set outside-region status', action: actionSetOutsideRegion },
   { key: '8', label: 'Update alert sounds', action: actionUpdateSound },

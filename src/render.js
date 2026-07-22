@@ -10,9 +10,19 @@ function occupancyLabel(level) {
 // toggle (NotAvailable) and a scheduled block (NotAvailalbeScheduled - sic,
 // that typo is in PreCom's own API). Checking NotAvailable alone misses
 // anyone who scheduled a block instead of toggling immediate unavailability.
+// PreCom's availability model, decoded via a live A/B test on 2026-07-22 (see
+// the CLAUDE.md API notes): scheduler blocks are AVAILABILITY (on-call)
+// periods, and the typo'd NotAvailalbeScheduled flag is INVERTED from its
+// name - it is true while a scheduled availability block is active (i.e. the
+// user IS available). So: unavailable when the manual NotAvailable toggle is
+// set, or when no availability block is active right now. If the scheduled
+// flag is absent entirely (a future server change), fall back to the manual
+// toggle alone rather than reporting everyone as unavailable.
 function isNotAvailable(info) {
-  const scheduled = info.NotAvailalbeScheduled ?? info.NotAvailableScheduled;
-  return Boolean(info.NotAvailable) || Boolean(scheduled);
+  const scheduledAvailable = info.NotAvailalbeScheduled ?? info.NotAvailableScheduled;
+  if (info.NotAvailable) return true;
+  if (scheduledAvailable === undefined || scheduledAvailable === null) return false;
+  return !scheduledAvailable;
 }
 
 function renderStatus(info, { json = false } = {}) {

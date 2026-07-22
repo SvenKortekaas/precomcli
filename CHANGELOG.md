@@ -8,6 +8,17 @@ feature area rather than by a tagged release.
 
 ## [Unreleased]
 
+### Fixed
+- **Availability was reported inverted** for accounts with an on-call roster.
+  A live A/B test against the official app (2026-07-22) proved that scheduler
+  appointments are *availability* (on-call) blocks — not unavailability, as
+  PreCom's own `GetUserSchedulerAppointments` swagger summary wrongly claims —
+  and that `NotAvailalbeScheduled` is inverted from its name (true = a
+  scheduled availability block is active, i.e. the user IS available).
+  `isNotAvailable` (CLI + web app), the `schedule`/`schedule-add`/
+  `schedule-remove` help/output text, and the menu's Availability submenu
+  labels/prompts all now reflect the real semantics.
+
 ### Added
 - Web app (PWA) in `web/` — a browser/mobile version of the tool (status +
   availability, alarms with per-alarm response, message inbox/sending, capcode
