@@ -908,6 +908,30 @@ function loadSettings() {
     el(
       'div',
       { class: 'card' },
+      el('h3', null, 'Install as app'),
+      IS_STANDALONE
+        ? el('p', { class: 'hint' }, 'Already running as an installed app.')
+        : IS_IOS
+          ? el(
+              'p',
+              { class: 'hint' },
+              'iPhone/iPad: tap Share ⬆︎ in Safari and choose "Add to Home Screen". (iOS offers no install button to apps.)'
+            )
+          : deferredInstallPrompt
+            ? el(
+                'button',
+                { class: 'primary', onclick: () => deferredInstallPrompt.prompt() },
+                'Install'
+              )
+            : el(
+                'p',
+                { class: 'hint' },
+                'Use your browser\'s menu → "Install app" / "Add to Home screen" (Chrome and Edge support this).'
+              )
+    ),
+    el(
+      'div',
+      { class: 'card' },
       el('p', null, `Logged in as ${store.get('userName') || 'unknown'}`),
       el(
         'button',
@@ -977,7 +1001,13 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-// ---------- install hint ----------
+// ---------- install (hint banner + Settings card) ----------
+
+const IS_IOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+const IS_STANDALONE =
+  window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+let deferredInstallPrompt = null;
+
 // iOS Safari has NO install prompt for web apps, ever — the only path is
 // Share > Add to Home Screen, so show a one-time hint explaining that.
 // Chromium browsers DO fire beforeinstallprompt; capture it and offer a real
@@ -1005,20 +1035,19 @@ function installBanner(text, buttonLabel, onButton) {
   return banner;
 }
 
-const isStandalone =
-  window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-if (!isStandalone && !store.get('installHintDismissed')) {
-  if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
-    installBanner('Install as app: tap Share ⬆︎ and then "Add to Home Screen".');
-  } else {
-    window.addEventListener('beforeinstallprompt', (event) => {
-      event.preventDefault();
-      const banner = installBanner('This site works as an app.', 'Install', async () => {
-        banner.remove();
-        event.prompt();
-      });
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event; // used by the banner and the Settings card
+  if (!IS_STANDALONE && !store.get('installHintDismissed')) {
+    const banner = installBanner('This site works as an app.', 'Install', () => {
+      banner.remove();
+      event.prompt();
     });
   }
+});
+
+if (IS_IOS && !IS_STANDALONE && !store.get('installHintDismissed')) {
+  installBanner('Install as app: tap Share ⬆︎ and then "Add to Home Screen".');
 }
 
 showView(store.get('token') ? 'home' : 'login');

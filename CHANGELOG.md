@@ -36,6 +36,8 @@ feature area rather than by a tagged release.
   meaningful.
 
 ### Added
+- Web app: an "Install as app" card in Settings — Install button where the
+  browser supports prompting, platform-appropriate instructions otherwise.
 - Web app: install support — iOS gets the Apple meta tags for a proper
   full-screen Home Screen app plus a one-time "tap Share → Add to Home
   Screen" hint (iOS has no native install prompt); Chromium browsers get a
