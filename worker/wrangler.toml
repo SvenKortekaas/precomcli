@@ -1,5 +1,12 @@
-# Deploy with: npx wrangler deploy   (from this directory; needs a Cloudflare login)
-# Or skip wrangler entirely: paste worker.js into the Cloudflare dashboard editor.
-name = "precom-proxy"
+# Deployed automatically by Cloudflare Workers Builds (git integration) on
+# push; `npx wrangler deploy` from this directory also works for manual runs.
+# The name must match the Workers Builds project name ("precomcli") or every
+# CI deploy warns about a mismatch and tries to open a PR to fix it.
+name = "precomcli"
 main = "worker.js"
 compatibility_date = "2026-07-01"
+
+# The workers.dev URL is the proxy's public address - keep it enabled.
+workers_dev = true
+# No need for per-version preview URLs on a stateless proxy.
+preview_urls = false
