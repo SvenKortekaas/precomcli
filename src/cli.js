@@ -6,7 +6,9 @@ const {
   parseReceivers,
   toTimeSpan,
   parseWeekdays,
+  buildSoundPayload,
   VALID_SOUNDS,
+  SOUND_CATEGORIES,
 } = require('./api');
 const { ask, askHidden, closePrompt } = require('./prompt');
 const render = require('./render');
@@ -95,14 +97,30 @@ pass --group-user-id (from "group-changes") to UPDATE that one instead.
 describe the write endpoints for either well enough to implement safely
 yet (see CLAUDE.md).`;
 
+// Flags that never take a value - they're always a bare boolean switch. Listed
+// so `--priority false` can't be misread as "priority = 'false'" (which is
+// truthy), and so a boolean flag directly before a positional doesn't swallow
+// it as its value.
+const BOOLEAN_FLAGS = new Set([
+  'all', 'json', 'priority', 'response', 'enable', 'disable', 'available', 'unavailable',
+  'clean-day-first', 'enter', 'exit',
+  'critical-alarm', 'critical-info', 'critical-understaffing', 'critical-occupancy', 'critical-proposal',
+]);
+
 function parseArgs(argv) {
   const args = { _: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg.startsWith('--')) {
+      // Support --flag=value in addition to --flag value.
+      const eq = arg.indexOf('=');
+      if (eq !== -1) {
+        args[arg.slice(2, eq)] = arg.slice(eq + 1);
+        continue;
+      }
       const key = arg.slice(2);
       const next = argv[i + 1];
-      if (next !== undefined && !next.startsWith('--')) {
+      if (!BOOLEAN_FLAGS.has(key) && next !== undefined && !next.startsWith('--')) {
         args[key] = next;
         i += 1;
       } else {
@@ -128,6 +146,15 @@ function requireAuth(cfg) {
   if (cfg.expiresAt && Date.now() > cfg.expiresAt) {
     throw new PreComError('Session expired. Run "precomcli login" again.', 401);
   }
+}
+
+// Loads config, enforces a valid session, and returns both the config and a
+// ready client. Every authenticated command starts here - routing auth through
+// one place means a new command can't accidentally skip the session check.
+function authed() {
+  const cfg = config.load();
+  requireAuth(cfg);
+  return { cfg, client: clientFromConfig() };
 }
 
 async function cmdLogin(args) {
@@ -163,38 +190,28 @@ async function cmdLogout() {
 }
 
 async function cmdStatus(args) {
-  const cfg = config.load();
-  requireAuth(cfg);
-  const info = await clientFromConfig().getUserInfo();
+  const info = await authed().client.getUserInfo();
   render.renderStatus(info, { json: Boolean(args.json) });
 }
 
 async function cmdGroups(args) {
-  const cfg = config.load();
-  requireAuth(cfg);
-  const client = clientFromConfig();
+  const { client } = authed();
   const groups = args.all ? await client.getAllGroups() : await client.getAllUserGroups();
   render.renderGroups(groups, { json: Boolean(args.json) });
 }
 
 async function cmdReceivers(args) {
-  const cfg = config.load();
-  requireAuth(cfg);
-  const receivers = await clientFromConfig().getReceivers();
+  const receivers = await authed().client.getReceivers();
   render.renderReceivers(receivers, { json: Boolean(args.json) });
 }
 
 async function cmdTemplates(args) {
-  const cfg = config.load();
-  requireAuth(cfg);
-  const templates = await clientFromConfig().getTemplates();
+  const templates = await authed().client.getTemplates();
   render.renderTemplates(templates, { json: Boolean(args.json) });
 }
 
 async function cmdMessage(args) {
-  const cfg = config.load();
-  requireAuth(cfg);
-  const client = clientFromConfig();
+  const { cfg, client } = authed();
 
   if (!args.to) {
     throw new Error(
@@ -247,18 +264,14 @@ async function cmdMessage(args) {
 }
 
 async function cmdMessages(args) {
-  const cfg = config.load();
-  requireAuth(cfg);
-  const messages = await clientFromConfig().getMessages(args['control-id']);
+  const messages = await authed().client.getMessages(args['control-id']);
   render.renderMessages(messages, { json: Boolean(args.json) });
 }
 
 async function cmdAlarms(args) {
-  const cfg = config.load();
-  requireAuth(cfg);
   const msgInID = Number(args['msg-in-id'] ?? 0);
   const previousOrNext = Number(args['previous-or-next'] ?? 0);
-  const alarms = await clientFromConfig().getAlarmMessages(msgInID, previousOrNext);
+  const alarms = await authed().client.getAlarmMessages(msgInID, previousOrNext);
   render.renderAlarmMessages(alarms, { json: Boolean(args.json) });
 }
 
@@ -268,23 +281,17 @@ async function cmdRespondAlarm(args) {
   if (!msgInID || (answer !== 'yes' && answer !== 'no')) {
     throw new Error('Usage: precomcli respond-alarm <msgInID> <yes|no>');
   }
-  const cfg = config.load();
-  requireAuth(cfg);
-  await clientFromConfig().setAvailabilityForAlarmMessage(Number(msgInID), answer === 'yes');
+  await authed().client.setAvailabilityForAlarmMessage(Number(msgInID), answer === 'yes');
   console.log(`Responded "${answer}" to alarm ${msgInID}.`);
 }
 
 async function cmdAvailable() {
-  const cfg = config.load();
-  requireAuth(cfg);
-  await clientFromConfig().setAvailable();
+  await authed().client.setAvailable();
   console.log('You are now marked as available.');
 }
 
 async function cmdSchedule(args) {
-  const cfg = config.load();
-  requireAuth(cfg);
-  const client = clientFromConfig();
+  const { client } = authed();
 
   const today = new Date();
   const inWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -300,9 +307,7 @@ async function cmdScheduleAdd(args) {
   if (!date || from === undefined || to === undefined) {
     throw new Error('Usage: precomcli schedule-add <date> <fromHour> <toHour>');
   }
-  const cfg = config.load();
-  requireAuth(cfg);
-  await clientFromConfig().addUserSchedulerAppointment(date, toTimeSpan(from), toTimeSpan(to));
+  await authed().client.addUserSchedulerAppointment(date, toTimeSpan(from), toTimeSpan(to));
   console.log(`Added unavailability block on ${date}, ${from}:00-${to}:00.`);
 }
 
@@ -311,16 +316,12 @@ async function cmdScheduleRemove(args) {
   if (!date || from === undefined || to === undefined) {
     throw new Error('Usage: precomcli schedule-remove <date> <fromHour> <toHour>');
   }
-  const cfg = config.load();
-  requireAuth(cfg);
-  await clientFromConfig().deleteUserSchedulerAppointment(date, toTimeSpan(from), toTimeSpan(to));
+  await authed().client.deleteUserSchedulerAppointment(date, toTimeSpan(from), toTimeSpan(to));
   console.log(`Removed unavailability block on ${date}, ${from}:00-${to}:00.`);
 }
 
 async function cmdCapcodes(args) {
-  const cfg = config.load();
-  requireAuth(cfg);
-  const capcodes = await clientFromConfig().getUserCapcodes();
+  const capcodes = await authed().client.getUserCapcodes();
   render.renderCapcodes(capcodes, { json: Boolean(args.json) });
 }
 
@@ -329,9 +330,7 @@ async function cmdCapcodeToggle(args) {
   if (!capcodeId || (!args.enable && !args.disable)) {
     throw new Error('Usage: precomcli capcode-toggle <capcodeId> (--enable|--disable)');
   }
-  const cfg = config.load();
-  requireAuth(cfg);
-  await clientFromConfig().updateUserCapcode(Number(capcodeId), Boolean(args.enable));
+  await authed().client.updateUserCapcode(Number(capcodeId), Boolean(args.enable));
   console.log(`Capcode ${capcodeId} ${args.enable ? 'enabled' : 'disabled'}.`);
 }
 
@@ -340,9 +339,7 @@ async function cmdUnderstaffedDays(args) {
   if (!groupId) {
     throw new Error('Usage: precomcli understaffed-days <groupId>');
   }
-  const cfg = config.load();
-  requireAuth(cfg);
-  const dates = await clientFromConfig().getAllDaysNoOccupancy(groupId);
+  const dates = await authed().client.getAllDaysNoOccupancy(groupId);
   render.renderDaysNoOccupancy(dates, { json: Boolean(args.json) });
 }
 
@@ -351,10 +348,8 @@ async function cmdFunctions(args) {
   if (!groupId) {
     throw new Error('Usage: precomcli functions <groupId> [--date <date>]');
   }
-  const cfg = config.load();
-  requireAuth(cfg);
   const date = args.date || new Date().toISOString().slice(0, 10);
-  const group = await clientFromConfig().getAllFunctions(groupId, date);
+  const group = await authed().client.getAllFunctions(groupId, date);
   render.renderFunctions(group, { json: Boolean(args.json) });
 }
 
@@ -373,9 +368,7 @@ async function cmdScheduleRecurring(args) {
         '--weekdays <mon,tue,...> (--available|--unavailable) [--weekly <n>] [--clean-day-first]'
     );
   }
-  const cfg = config.load();
-  requireAuth(cfg);
-  const client = clientFromConfig();
+  const { client } = authed();
   const weekDays = parseWeekdays(args.weekdays);
   await client.updateUserSchedulerPeriod(
     startDate,
@@ -395,39 +388,21 @@ async function cmdOutsideRegion(args) {
   if (!hours || (!args.enter && !args.exit)) {
     throw new Error('Usage: precomcli outside-region <hours> (--enter|--exit)');
   }
-  const cfg = config.load();
-  requireAuth(cfg);
-  await clientFromConfig().setOutsideRegion(Number(hours), args.enter ? 'ENTER' : 'EXIT');
+  await authed().client.setOutsideRegion(Number(hours), args.enter ? 'ENTER' : 'EXIT');
   console.log(`Outside-region status set: ${args.enter ? 'entered' : 'exited'} region for ${hours} hour(s).`);
 }
 
 async function cmdSound(args) {
-  const cfg = config.load();
-  requireAuth(cfg);
-  const client = clientFromConfig();
-  const current = await client.getUserInfo();
+  const { client } = authed();
 
-  const fields = { alarm: 'SoundAlarm', info: 'SoundInfo', understaffing: 'SoundUnderstaffing',
-    occupancy: 'SoundOccupancy', proposal: 'SoundProposal' };
-  for (const [flag, field] of Object.entries(fields)) {
-    if (args[flag] && !VALID_SOUNDS.includes(args[flag])) {
-      throw new Error(`Invalid sound "${args[flag]}" for --${flag}. Valid: ${VALID_SOUNDS.join(', ')}`);
+  for (const category of Object.keys(SOUND_CATEGORIES)) {
+    if (args[category] && !VALID_SOUNDS.includes(args[category])) {
+      throw new Error(`Invalid sound "${args[category]}" for --${category}. Valid: ${VALID_SOUNDS.join(', ')}`);
     }
   }
 
-  const sound = {
-    SoundAlarm: args.alarm || current.SoundAlarm,
-    SoundInfo: args.info || current.SoundInfo,
-    SoundUnderstaffing: args.understaffing || current.SoundUnderstaffing,
-    SoundOccupancy: args.occupancy || current.SoundOccupancy,
-    SoundProposal: args.proposal || current.SoundProposal,
-    CriticalAlertsAlarm: args['critical-alarm'] ? true : current.CriticalAlertsAlarm,
-    CriticalAlertsInfo: args['critical-info'] ? true : current.CriticalAlertsInfo,
-    CriticalAlertsUnderstaffing: args['critical-understaffing'] ? true : current.CriticalAlertsUnderstaffing,
-    CriticalAlertsOccupancy: args['critical-occupancy'] ? true : current.CriticalAlertsOccupancy,
-    CriticalAlertsProposal: args['critical-proposal'] ? true : current.CriticalAlertsProposal,
-  };
-  await client.updateUserSound(sound);
+  const current = await client.getUserInfo();
+  await client.updateUserSound(buildSoundPayload(current, args));
   console.log('Sound settings updated.');
 }
 
@@ -443,23 +418,17 @@ async function cmdResetPassword(args) {
 }
 
 async function cmdInfo(args) {
-  const cfg = config.load();
-  requireAuth(cfg);
-  const info = await clientFromConfig().getInformation();
+  const info = await authed().client.getInformation();
   render.renderInformation(info, { json: Boolean(args.json) });
 }
 
 async function cmdGroupChange(args) {
-  const cfg = config.load();
-  requireAuth(cfg);
-  const gc = await clientFromConfig().getGroupChange();
+  const gc = await authed().client.getGroupChange();
   render.renderGroupChange(gc, { json: Boolean(args.json) });
 }
 
 async function cmdGroupChanges(args) {
-  const cfg = config.load();
-  requireAuth(cfg);
-  const changes = await clientFromConfig().getAllGroupChanges();
+  const changes = await authed().client.getAllGroupChanges();
   render.renderGroupChanges(changes, { json: Boolean(args.json) });
 }
 
@@ -469,9 +438,7 @@ async function cmdGroupChangeDays(args) {
     throw new Error('Usage: precomcli group-change-days <groupId> <date1,date2,...> [--group-user-id <id>]');
   }
   const dates = datesArg.split(',').map((d) => d.trim());
-  const cfg = config.load();
-  requireAuth(cfg);
-  const client = clientFromConfig();
+  const { client } = authed();
   if (args['group-user-id']) {
     await client.updateGroupChangeForDays(Number(args['group-user-id']), groupId, dates);
   } else {
@@ -485,9 +452,7 @@ async function cmdGroupChangePeriod(args) {
   if (!groupId || !from || !to) {
     throw new Error('Usage: precomcli group-change-period <groupId> <from> <to> [--group-user-id <id>]');
   }
-  const cfg = config.load();
-  requireAuth(cfg);
-  const client = clientFromConfig();
+  const { client } = authed();
   if (args['group-user-id']) {
     await client.updateGroupChangeForPeriod(Number(args['group-user-id']), groupId, from, to);
   } else {
@@ -504,9 +469,7 @@ async function cmdGroupChangeRecurring(args) {
         '--weekdays <mon,tue,...> [--group-user-id <id>]'
     );
   }
-  const cfg = config.load();
-  requireAuth(cfg);
-  const client = clientFromConfig();
+  const { client } = authed();
   const weekdays = parseWeekdays(args.weekdays);
   if (args['group-user-id']) {
     await client.updateGroupChangePeriodically(Number(args['group-user-id']), groupId, weekdays, startTime, stopTime);
@@ -521,16 +484,12 @@ async function cmdGroupChangeDeleteType(args) {
   if (!groupId || type === undefined) {
     throw new Error('Usage: precomcli group-change-delete-type <groupId> <type>');
   }
-  const cfg = config.load();
-  requireAuth(cfg);
-  await clientFromConfig().deleteOneTypeGroupChange(Number(groupId), Number(type));
+  await authed().client.deleteOneTypeGroupChange(Number(groupId), Number(type));
   console.log('Group change deleted.');
 }
 
 async function cmdGroupChangeDelete() {
-  const cfg = config.load();
-  requireAuth(cfg);
-  await clientFromConfig().deleteGroupChange();
+  await authed().client.deleteGroupChange();
   console.log('Group change deleted.');
 }
 
@@ -539,9 +498,7 @@ async function cmdGroupChangeDeleteOne(args) {
   if (!groupUserId) {
     throw new Error('Usage: precomcli group-change-delete-one <groupUserId>');
   }
-  const cfg = config.load();
-  requireAuth(cfg);
-  await clientFromConfig().deleteOneGroupChange(Number(groupUserId));
+  await authed().client.deleteOneGroupChange(Number(groupUserId));
   console.log('Group change deleted.');
 }
 
@@ -550,9 +507,7 @@ async function cmdPiketSchedule(args) {
   if (!groupId) {
     throw new Error('Usage: precomcli piket-schedule <groupId> [--from <date>] [--to <date>]');
   }
-  const cfg = config.load();
-  requireAuth(cfg);
-  const client = clientFromConfig();
+  const { client } = authed();
   const info = await client.getUserInfo();
   const today = new Date();
   const in30 = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -563,9 +518,7 @@ async function cmdPiketSchedule(args) {
 }
 
 async function cmdShifts(args) {
-  const cfg = config.load();
-  requireAuth(cfg);
-  const shiftWork = await clientFromConfig().getShiftAppointments();
+  const shiftWork = await authed().client.getShiftAppointments();
   render.renderShiftAppointments(shiftWork, { json: Boolean(args.json) });
 }
 
@@ -574,9 +527,7 @@ async function cmdGroupStatus(args) {
   if (!groupId) {
     throw new Error('Usage: precomcli group-status <groupId> [--from <date>] [--to <date>]');
   }
-  const cfg = config.load();
-  requireAuth(cfg);
-  const client = clientFromConfig();
+  const { client } = authed();
 
   const today = new Date();
   const inWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -718,4 +669,4 @@ async function main() {
   }
 }
 
-module.exports = { main };
+module.exports = { main, parseArgs };

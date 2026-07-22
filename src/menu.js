@@ -5,7 +5,9 @@ const {
   DEFAULT_BASE_URL,
   toTimeSpan,
   parseWeekdays,
+  buildSoundPayload,
   VALID_SOUNDS,
+  SOUND_CATEGORIES,
 } = require('./api');
 const { ask, askHidden, closePrompt } = require('./prompt');
 const render = require('./render');
@@ -447,22 +449,14 @@ async function actionUpdateSound() {
   console.log('');
   console.log(`Valid sounds: ${VALID_SOUNDS.join(', ')}`);
 
-  const fieldMap = {
-    alarm: 'SoundAlarm',
-    info: 'SoundInfo',
-    understaffing: 'SoundUnderstaffing',
-    occupancy: 'SoundOccupancy',
-    proposal: 'SoundProposal',
-  };
-  const category = (await ask('Which to change? (alarm/info/understaffing/occupancy/proposal): '))
-    .trim()
-    .toLowerCase();
-  const field = fieldMap[category];
-  if (!field) {
+  const categories = Object.keys(SOUND_CATEGORIES);
+  const category = (await ask(`Which to change? (${categories.join('/')}): `)).trim().toLowerCase();
+  const fieldNames = SOUND_CATEGORIES[category];
+  if (!fieldNames) {
     console.log('Cancelled: unknown category.');
     return;
   }
-  const newSound = await ask(`New sound for ${category} [${info[field]}]: `);
+  const newSound = await ask(`New sound for ${category} [${info[fieldNames.sound]}]: `);
   if (!newSound) {
     console.log('Cancelled.');
     return;
@@ -476,19 +470,7 @@ async function actionUpdateSound() {
     console.log('Cancelled.');
     return;
   }
-  await client.updateUserSound({
-    SoundAlarm: info.SoundAlarm,
-    SoundInfo: info.SoundInfo,
-    SoundUnderstaffing: info.SoundUnderstaffing,
-    SoundOccupancy: info.SoundOccupancy,
-    SoundProposal: info.SoundProposal,
-    CriticalAlertsAlarm: info.CriticalAlertsAlarm,
-    CriticalAlertsInfo: info.CriticalAlertsInfo,
-    CriticalAlertsUnderstaffing: info.CriticalAlertsUnderstaffing,
-    CriticalAlertsOccupancy: info.CriticalAlertsOccupancy,
-    CriticalAlertsProposal: info.CriticalAlertsProposal,
-    [field]: newSound,
-  });
+  await client.updateUserSound(buildSoundPayload(info, { [category]: newSound }));
   console.log('Sound settings updated.');
 }
 

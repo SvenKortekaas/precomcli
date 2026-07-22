@@ -1,13 +1,20 @@
 {
   "name": "precomcli",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "description": "CLI for the PreCom Mobile API (pre-com.nl)",
   "main": "src/cli.js",
   "bin": {
     "precomcli": "bin/precomcli.js"
   },
+  "scripts": {
+    "test": "node --test"
+  },
   "engines": {
     "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SvenKortekaas/precomcli.git"
   },
   "license": "UNLICENSED",
   "private": true

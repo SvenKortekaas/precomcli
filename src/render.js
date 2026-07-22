@@ -347,4 +347,7 @@ module.exports = {
   renderShiftAppointments,
   receiverTypeLabel,
   occupancyLabel,
+  // Exported for unit testing (both carry real logic that has bitten before).
+  isNotAvailable,
+  groupChangeSummary,
 };

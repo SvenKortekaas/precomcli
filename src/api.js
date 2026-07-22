@@ -31,8 +31,12 @@ class PreComClient {
     return data; // { access_token, token_type, expires_in, userName, .issued, .expires }
   }
 
-  async request(method, path, { query, body } = {}) {
-    if (!this.token) {
+  // auth: set false for the handful of endpoints that work without a bearer
+  // token (e.g. ResetPassword - recovering a lost password), so this one
+  // method handles every request's query-building, parsing, and error-detail
+  // surfacing rather than duplicating it per unauthenticated endpoint.
+  async request(method, path, { query, body, auth = true } = {}) {
+    if (auth && !this.token) {
       throw new PreComError('Not authenticated. Run "precomcli login" first.', 401);
     }
     let url = `${this.baseUrl}${path}`;
@@ -47,7 +51,7 @@ class PreComClient {
     const res = await fetch(url, {
       method,
       headers: {
-        Authorization: `Bearer ${this.token}`,
+        ...(auth ? { Authorization: `Bearer ${this.token}` } : {}),
         ...(body ? { 'Content-Type': 'application/json' } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
@@ -192,26 +196,9 @@ class PreComClient {
     return this.request('POST', '/api/User/UpdateUserSound', { body: sound });
   }
 
-  // Does NOT require authentication (recovering a lost password), so this bypasses request()'s
-  // token check and Authorization header rather than reusing it.
-  async resetPassword(email) {
-    const res = await fetch(`${this.baseUrl}/api/Account/ResetPassword?email=${encodeURIComponent(email)}`, {
-      method: 'POST',
-    });
-    const text = await res.text();
-    let data = null;
-    if (text) {
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = text;
-      }
-    }
-    if (!res.ok) {
-      const message = (data && data.Message) || `Request failed (HTTP ${res.status})`;
-      throw new PreComError(message, res.status, data);
-    }
-    return data;
+  // Does NOT require authentication (recovering a lost password) - see request()'s `auth` option.
+  resetPassword(email) {
+    return this.request('POST', '/api/Account/ResetPassword', { query: { email }, auth: false });
   }
 
   // Versioned-only endpoint - no unversioned route exists for this one, unlike the rest of the API.
@@ -305,6 +292,32 @@ const VALID_SOUNDS = [
   'siren', 'siren2x', 'siren3x', 'siren6x',
 ];
 
+// The five sound categories and their GetUserInfo/UpdateUserSound field names,
+// keyed by the short name used in CLI flags and menu prompts.
+const SOUND_CATEGORIES = {
+  alarm: { sound: 'SoundAlarm', critical: 'CriticalAlertsAlarm' },
+  info: { sound: 'SoundInfo', critical: 'CriticalAlertsInfo' },
+  understaffing: { sound: 'SoundUnderstaffing', critical: 'CriticalAlertsUnderstaffing' },
+  occupancy: { sound: 'SoundOccupancy', critical: 'CriticalAlertsOccupancy' },
+  proposal: { sound: 'SoundProposal', critical: 'CriticalAlertsProposal' },
+};
+
+// UpdateUserSound replaces the whole sound object, so build the full 10-field
+// payload from the current GetUserInfo values, overriding only what changed.
+// changes: { <category>: <soundName> } and/or { critical<Category>: true }.
+function buildSoundPayload(current, changes = {}) {
+  const payload = {};
+  for (const { sound, critical } of Object.values(SOUND_CATEGORIES)) {
+    payload[sound] = current[sound];
+    payload[critical] = current[critical];
+  }
+  for (const [category, { sound, critical }] of Object.entries(SOUND_CATEGORIES)) {
+    if (changes[category]) payload[sound] = changes[category];
+    if (changes[`critical-${category}`]) payload[critical] = true;
+  }
+  return payload;
+}
+
 const WEEKDAY_BITS = { mon: 1, tue: 2, wed: 4, thu: 8, fri: 16, sat: 32, sun: 64 };
 
 // Parses "mon,wed,fri" into the bit-array integer UpdateUserSchedulerPeriod expects.
@@ -352,5 +365,7 @@ module.exports = {
   parseReceivers,
   toTimeSpan,
   parseWeekdays,
+  buildSoundPayload,
   VALID_SOUNDS,
+  SOUND_CATEGORIES,
 };

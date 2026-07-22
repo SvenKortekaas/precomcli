@@ -6,6 +6,10 @@ Command-line client for the [PreCom](https://pre-com.nl) Mobile API.
 
 - Node.js >= 18 (uses the built-in `fetch`)
 
+No runtime dependencies. Tests run with `npm test` (Node's built-in
+`node:test` runner — no dev dependencies either). See `CHANGELOG.md` for the
+version history.
+
 ## Interactive menu (default)
 
 Running the tool with no arguments — or double-clicking / running
