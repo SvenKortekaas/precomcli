@@ -179,9 +179,10 @@ async function login(proxy, username, password) {
 
 // ---------- views ----------
 
-const views = ['login', 'home', 'alarms', 'messages', 'capcodes', 'settings'];
+const views = ['login', 'home', 'groups', 'alarms', 'messages', 'capcodes', 'settings'];
 const loaders = {
   home: loadHome,
+  groups: loadGroups,
   alarms: loadAlarms,
   messages: loadMessages,
   capcodes: loadCapcodes,
@@ -334,6 +335,104 @@ async function loadHome() {
   );
 }
 
+// ----- groups (roles + everyone's status) -----
+
+const groupsState = { groups: null, loaded: {} };
+
+async function loadGroups() {
+  const section = document.getElementById('view-groups');
+  spinner(section);
+  try {
+    groupsState.groups = (await api('GET', '/api/Group/GetAllUserGroups')) || [];
+  } catch (err) {
+    replaceChildren(section, sectionHeader('Groups', refreshGroups), errorLine(err));
+    return;
+  }
+  replaceChildren(
+    section,
+    sectionHeader('Groups', refreshGroups),
+    groupsState.groups.length
+      ? groupsState.groups.map(groupCard)
+      : el('p', { class: 'hint' }, 'No groups.')
+  );
+}
+
+function refreshGroups() {
+  groupsState.loaded = {};
+  loadGroups();
+}
+
+function groupCard(group) {
+  const body = el('div', null, el('p', { class: 'hint' }, 'Loading…'));
+  const details = el(
+    'details',
+    { class: 'card group-card' },
+    el('summary', null, `${(group.Label || '').trim() || `Group ${group.GroupID}`}`),
+    body
+  );
+  details.addEventListener('toggle', () => {
+    if (details.open) fillGroupFunctions(group.GroupID, body);
+  });
+  return details;
+}
+
+async function fillGroupFunctions(groupID, body) {
+  if (groupsState.loaded[groupID]) return; // fetched once per Refresh
+  groupsState.loaded[groupID] = true;
+  let data;
+  try {
+    data = await api('GET', '/api/Group/GetAllFunctions', {
+      query: { groupID, date: localDate() },
+    });
+  } catch (err) {
+    delete groupsState.loaded[groupID];
+    replaceChildren(body, errorLine(err));
+    return;
+  }
+  const functions = data.ServiceFuntions || []; // "Funtions" — PreCom's own typo
+  if (!functions.length) {
+    replaceChildren(body, el('p', { class: 'hint' }, 'No functions/roles configured for this group.'));
+    return;
+  }
+  replaceChildren(body, functions.map(functionBlock));
+}
+
+function functionBlock(fn) {
+  // Available people first, then alphabetically within each status.
+  const users = (fn.Users || []).slice().sort((a, b) => {
+    const availDiff = Number(isNotAvailable(a)) - Number(isNotAvailable(b));
+    if (availDiff !== 0) return availDiff;
+    return (a.FullName || '').trim().localeCompare((b.FullName || '').trim());
+  });
+  const availableCount = users.filter((u) => !isNotAvailable(u)).length;
+  const short = availableCount < (fn.NumberNeeded || 0);
+  return el(
+    'div',
+    { class: 'function-block' },
+    el(
+      'p',
+      { class: 'function-head' },
+      el('strong', null, fn.Label || `Function ${fn.ServiceFunctionID}`),
+      ' ',
+      el(
+        'span',
+        { class: short ? 'badge bad' : 'badge good' },
+        `${availableCount} available / ${fn.NumberNeeded || 0} needed`
+      )
+    ),
+    users.length
+      ? users.map((u) =>
+          el(
+            'p',
+            { class: 'user-row' },
+            el('span', { class: isNotAvailable(u) ? 'dot bad' : 'dot good' }),
+            (u.FullName || '').trim() || `User ${u.UserID}`
+          )
+        )
+      : el('p', { class: 'hint' }, 'Nobody assigned.')
+  );
+}
+
 // ----- alarms -----
 
 const alarmState = { alarms: [] };
@@ -384,9 +483,10 @@ async function loadAlarms() {
   const section = document.getElementById('view-alarms');
   spinner(section);
   try {
-    // previousOrNext: 0 = most recent, msgInID ignored (see CLAUDE.md API notes).
+    // previousOrNext: 0 = most recent, msgInID ignored but still required by
+    // the route — omitting it is a 404 (see CLAUDE.md API notes).
     alarmState.alarms = (await api('GET', '/api/User/GetAlarmMessages', {
-      query: { previousOrNext: 0 },
+      query: { msgInID: 0, previousOrNext: 0 },
     })) || [];
   } catch (err) {
     replaceChildren(section, sectionHeader('Alarms', loadAlarms), errorLine(err));

@@ -185,6 +185,44 @@ summary {
   font-size: 0.85rem;
 }
 
+.group-card > summary {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.function-block {
+  margin: 0.7rem 0 0.7rem 0.2rem;
+}
+
+.function-head {
+  margin: 0.2rem 0 0.3rem;
+}
+
+.user-row {
+  margin: 0.15rem 0;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.dot {
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot.good {
+  background: var(--good);
+}
+
+.dot.bad {
+  background: var(--bad);
+}
+
 button {
   font: inherit;
   padding: 0.55rem 1rem;

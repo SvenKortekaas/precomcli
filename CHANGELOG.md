@@ -27,6 +27,9 @@ feature area rather than by a tagged release.
   exact-match delete — the old whole-hour-only refusal is obsolete).
 
 ### Added
+- Web app: a Groups tab — collapsible cards per group, each showing every
+  role (`GetAllFunctions`) with an available/needed staffing badge and all
+  members sorted available-first with a live status dot.
 - The web app now defaults to the project's shared relay (`DEFAULT_PROXY`),
   so users just open the site and log in — no per-user Cloudflare Worker
   needed. Self-hosters can still override the proxy URL via the login

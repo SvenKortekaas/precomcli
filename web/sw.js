@@ -3,7 +3,7 @@
 // Worker proxy) and are deliberately never intercepted or cached here.
 'use strict';
 
-const CACHE = 'precomcli-v4'; // bump when shipping changed shell files
+const CACHE = 'precomcli-v5'; // bump when shipping changed shell files
 const SHELL = [
   './',
   './index.html',
