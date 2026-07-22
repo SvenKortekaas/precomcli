@@ -394,7 +394,14 @@ async function fillGroupFunctions(groupID, body) {
     replaceChildren(body, el('p', { class: 'hint' }, 'No functions/roles configured for this group.'));
     return;
   }
-  replaceChildren(body, functions.map(functionBlock));
+  // A member can hold several roles — collect them for the detail modal.
+  const rolesByUser = {};
+  for (const fn of functions) {
+    for (const user of fn.Users || []) {
+      (rolesByUser[user.UserID] = rolesByUser[user.UserID] || []).push(fn.Label);
+    }
+  }
+  replaceChildren(body, functions.map((fn) => functionBlock(fn, rolesByUser)));
 }
 
 // Availability for user objects embedded in GetAllFunctions responses: their
@@ -413,7 +420,7 @@ function isMemberAvailable(user) {
   return Boolean(day[`Hour${new Date().getHours()}`]);
 }
 
-function functionBlock(fn) {
+function functionBlock(fn, rolesByUser) {
   // Available people first, then alphabetically within each status.
   const users = (fn.Users || []).slice().sort((a, b) => {
     const availDiff = Number(isMemberAvailable(b)) - Number(isMemberAvailable(a));
@@ -439,14 +446,120 @@ function functionBlock(fn) {
     users.length
       ? users.map((u) =>
           el(
-            'p',
-            { class: 'user-row' },
+            'button',
+            {
+              class: 'user-row',
+              onclick: () => openMemberModal(u, rolesByUser[u.UserID] || []),
+            },
             el('span', { class: isMemberAvailable(u) ? 'dot good' : 'dot bad' }),
-            (u.FullName || '').trim() || `User ${u.UserID}`
+            (u.FullName || '').trim() || `User ${u.UserID}`,
+            el('span', { class: 'chevron' }, '›')
           )
         )
       : el('p', { class: 'hint' }, 'Nobody assigned.')
   );
+}
+
+// Detail overlay for one group member: status, roles, today's hour-by-hour
+// availability, and a direct-message box (SendMessage with a Type 1 = user
+// receiver — same payload rules as the Messages tab, needs SendBy).
+function openMemberModal(user, roles) {
+  const name = (user.FullName || '').trim() || `User ${user.UserID}`;
+  const available = isMemberAvailable(user);
+  const dayKey = Object.keys(user.SchedulerDays || {}).find((k) => k.startsWith(localDate()));
+  const day = dayKey ? user.SchedulerDays[dayKey] : null;
+  const manualSince =
+    user.NotAvailable && user.NotAvailableTimestamp && !user.NotAvailableTimestamp.startsWith('0001')
+      ? ` since ${shortTimestamp(user.NotAvailableTimestamp)}`
+      : '';
+  const msgArea = el('textarea', { rows: '2', placeholder: `Message to ${name}…` });
+  const backdrop = el(
+    'div',
+    {
+      class: 'modal-backdrop',
+      onclick: (event) => {
+        if (event.target === backdrop) backdrop.remove();
+      },
+    },
+    el(
+      'div',
+      { class: 'modal' },
+      el(
+        'div',
+        { class: 'row spread' },
+        el('p', { class: 'big-name' }, name),
+        el('button', { class: 'small', onclick: () => backdrop.remove() }, 'Close')
+      ),
+      el(
+        'p',
+        null,
+        'Status: ',
+        el(
+          'span',
+          { class: available ? 'badge good' : 'badge bad' },
+          available ? 'Available' : 'NOT AVAILABLE'
+        )
+      ),
+      el('p', { class: 'meta' }, `User ID: ${user.UserID}`),
+      roles.length ? el('p', null, `Roles: ${roles.join(', ')}`) : null,
+      user.NotAvailable ? el('p', null, `Manually marked not available${manualSince}.`) : null,
+      day
+        ? el(
+            'div',
+            null,
+            el('p', { class: 'meta' }, "Today's availability (00:00-24:00, green = available):"),
+            el(
+              'div',
+              { class: 'hour-strip' },
+              Array.from({ length: 24 }, (_, h) =>
+                el('div', {
+                  class: day[`Hour${h}`] ? 'hour-cell good' : 'hour-cell',
+                  title: `${h}:00-${h + 1}:00`,
+                })
+              )
+            )
+          )
+        : null,
+      el('h3', null, 'Send a message'),
+      msgArea,
+      el(
+        'button',
+        {
+          class: 'primary',
+          onclick: async () => {
+            const message = msgArea.value.trim();
+            if (!message) {
+              notify('Enter a message first.', true);
+              return;
+            }
+            const sendBy = Number(store.get('sendBy'));
+            if (!sendBy) {
+              notify('Set your sender ID (SendBy) in Settings first — see the README for how to find it.', true);
+              return;
+            }
+            if (!confirm(`Send this message to ${name}?`)) return;
+            try {
+              await api('POST', '/api/Msg/SendMessage', {
+                body: {
+                  Message: message,
+                  Receivers: [{ Type: 1, ID: user.UserID, Label: name }],
+                  Priority: false,
+                  Response: false,
+                  SendBy: sendBy,
+                },
+              });
+              notify(`Message sent to ${name}.`);
+              backdrop.remove();
+            } catch (err) {
+              notify(err.message, true);
+            }
+          },
+        },
+        'Send'
+      )
+    )
+  );
+  document.body.append(backdrop);
 }
 
 // ----- alarms -----

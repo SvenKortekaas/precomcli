@@ -200,11 +200,24 @@ summary {
 }
 
 .user-row {
-  margin: 0.15rem 0;
+  margin: 0;
   font-size: 0.9rem;
   display: flex;
   align-items: center;
   gap: 0.4rem;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: 0;
+  text-align: left;
+  padding: 0.25rem 0;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.chevron {
+  margin-left: auto;
+  color: var(--muted);
 }
 
 .dot {
@@ -274,6 +287,50 @@ button.bad-btn {
 
 .receiver-row:last-child {
   border-bottom: none;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 20;
+}
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  padding: 1rem;
+  max-width: 26rem;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.modal p {
+  margin: 0.3rem 0;
+  overflow-wrap: anywhere;
+}
+
+.hour-strip {
+  display: flex;
+  gap: 1px;
+  margin: 0.3rem 0 0.5rem;
+}
+
+.hour-cell {
+  flex: 1;
+  height: 0.9rem;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.hour-cell.good {
+  background: var(--good);
 }
 
 #nav {

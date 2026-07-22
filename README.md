@@ -275,7 +275,9 @@ For people without a Windows PC (or without Node), `web/` contains a
 zero-dependency web version of the tool covering the core features: status +
 availability (mark yourself available / not available), a collapsible group
 overview showing every role (function) with everyone's live status and an
-available/needed staffing badge, alarm history with per-alarm response,
+available/needed staffing badge (tap a member for their details — status,
+roles, today's hour-by-hour availability — and to send them a direct
+message), alarm history with per-alarm response,
 message inbox + sending, and capcode management. It installs to the home screen on iOS and Android
 ("Add to Home Screen" / "Install app") and then looks and behaves like an app
 — no app store, no Mac, no Xcode.

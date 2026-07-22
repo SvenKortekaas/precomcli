@@ -36,6 +36,9 @@ feature area rather than by a tagged release.
   meaningful.
 
 ### Added
+- Web app: group members are clickable — a detail modal shows their status,
+  roles, manual-toggle info, and today's hour-by-hour availability strip,
+  plus a box to send them a direct message.
 - Web app: a Groups tab — collapsible cards per group, each showing every
   role (`GetAllFunctions`) with an available/needed staffing badge and all
   members sorted available-first with a live status dot.
