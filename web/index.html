@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- XSS containment: only same-origin scripts/styles run, no inline script,
+       and the page can only fetch over https. Keep this tag when editing. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https:; manifest-src 'self'; base-uri 'none'; form-action 'self'">
+  <meta name="theme-color" content="#c62828">
+  <title>PreCom</title>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+</head>
+<body>
+  <header>
+    <h1>PreCom</h1>
+    <span id="header-user"></span>
+  </header>
+
+  <main id="views">
+    <section id="view-login" hidden>
+      <h2>Log in</h2>
+      <p class="hint">Your credentials go straight to PreCom through your own
+        proxy. This app stores nothing on any server.</p>
+      <form id="login-form">
+        <label>Proxy URL
+          <input type="url" id="login-proxy" placeholder="https://precom-proxy.YOU.workers.dev" required>
+        </label>
+        <label>Username
+          <input type="text" id="login-username" autocomplete="username" autocapitalize="none" required>
+        </label>
+        <label>Password
+          <input type="password" id="login-password" autocomplete="current-password" required>
+        </label>
+        <button type="submit" class="primary">Log in</button>
+      </form>
+    </section>
+
+    <section id="view-home" hidden></section>
+    <section id="view-alarms" hidden></section>
+    <section id="view-messages" hidden></section>
+    <section id="view-capcodes" hidden></section>
+    <section id="view-settings" hidden></section>
+  </main>
+
+  <nav id="nav" hidden>
+    <button data-view="home">Home</button>
+    <button data-view="alarms">Alarms</button>
+    <button data-view="messages">Messages</button>
+    <button data-view="capcodes">Capcodes</button>
+    <button data-view="settings">Settings</button>
+  </nav>
+
+  <div id="toast" hidden></div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

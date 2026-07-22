@@ -9,6 +9,13 @@ feature area rather than by a tagged release.
 ## [Unreleased]
 
 ### Added
+- Web app (PWA) in `web/` — a browser/mobile version of the tool (status +
+  availability, alarms with per-alarm response, message inbox/sending, capcode
+  management), installable to the home screen on iOS/Android. Published to
+  GitHub Pages via `.github/workflows/pages.yml`.
+- `worker/worker.js` — stateless Cloudflare Worker CORS proxy the web app
+  needs (PreCom's API sends no CORS headers): hardcoded upstream, exact
+  endpoint/method allowlist, origin allowlist, no storage or logging.
 - Test suite using the built-in `node:test` runner (no dependencies): covers the
   pure functions that carry real logic — `parseReceivers`, `toTimeSpan`,
   `parseWeekdays`, `buildSoundPayload`, `isNotAvailable`, `groupChangeSummary`,

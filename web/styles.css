@@ -1,0 +1,277 @@
+:root {
+  --bg: #f4f4f6;
+  --surface: #ffffff;
+  --text: #1a1a20;
+  --muted: #6b6b76;
+  --line: #dcdce2;
+  --accent: #c62828;
+  --good: #1b7a3d;
+  --bad: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #131318;
+    --surface: #1e1e26;
+    --text: #ececf0;
+    --muted: #9a9aa6;
+    --line: #33333e;
+    --accent: #e05353;
+    --good: #4cba74;
+    --bad: #e0655e;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Sections/nav are toggled via the hidden attribute; without this, any rule
+   that sets display (e.g. #nav's flex) would override the UA's [hidden]. */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0.75rem 1rem calc(0.25rem);
+  padding-top: calc(0.75rem + env(safe-area-inset-top));
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+#header-user {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+main {
+  padding: 0 1rem;
+  max-width: 40rem;
+  margin: 0 auto;
+}
+
+h2 {
+  font-size: 1.05rem;
+  margin: 0.75rem 0 0.5rem;
+}
+
+h3 {
+  font-size: 0.95rem;
+  margin: 0 0 0.5rem;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  padding: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.card p {
+  margin: 0.25rem 0;
+  overflow-wrap: anywhere;
+}
+
+.big-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.error-line {
+  color: var(--bad);
+  font-size: 0.9rem;
+}
+
+.badge {
+  padding: 0.1rem 0.5rem;
+  border-radius: 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.badge.good {
+  background: var(--good);
+}
+
+.badge.bad {
+  background: var(--bad);
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  align-items: center;
+}
+
+.row.spread {
+  justify-content: space-between;
+  margin-top: 0;
+}
+
+label {
+  display: block;
+  margin: 0.6rem 0;
+  font-size: 0.9rem;
+}
+
+label.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-right: 1rem;
+}
+
+input,
+textarea,
+select {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.55rem;
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+}
+
+label.inline input,
+.receiver-row input {
+  display: inline;
+  width: auto;
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  padding: 0.55rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+button.small {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+button.good-btn {
+  color: var(--good);
+  border-color: var(--good);
+}
+
+button.bad-btn {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+.receiver-list {
+  max-height: 12rem;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.receiver-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.receiver-row:last-child {
+  border-bottom: none;
+}
+
+#nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+#nav button {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  background: none;
+  margin: 0;
+  padding: 0.8rem 0.2rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+#nav button.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+#toast {
+  position: fixed;
+  bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 90%;
+  padding: 0.6rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  color: #fff;
+  z-index: 10;
+}
+
+#toast.ok {
+  background: var(--good);
+}
+
+#toast.error {
+  background: var(--bad);
+}

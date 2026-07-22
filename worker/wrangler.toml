@@ -1,0 +1,5 @@
+# Deploy with: npx wrangler deploy   (from this directory; needs a Cloudflare login)
+# Or skip wrangler entirely: paste worker.js into the Cloudflare dashboard editor.
+name = "precom-proxy"
+main = "worker.js"
+compatibility_date = "2026-07-01"

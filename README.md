@@ -261,6 +261,59 @@ either mode.
 - `shifts` — views your shift-work record (`GetShiftAppointments`).
   **Read-only** for the same reason as `piket-schedule`.
 
+## Web app (PWA)
+
+For people without a Windows PC (or without Node), `web/` contains a
+zero-dependency web version of the tool covering the core features: status +
+availability, alarm history with per-alarm response, message inbox + sending,
+and capcode management. It installs to the home screen on iOS and Android
+("Add to Home Screen" / "Install app") and then looks and behaves like an app
+— no app store, no Mac, no Xcode.
+
+### Why a proxy is needed
+
+Browsers block direct calls to `https://pre-com.nl` because PreCom's API sends
+no CORS headers (verified live — there is no client-side workaround). The fix
+is `worker/worker.js`: a ~150-line Cloudflare Worker (free tier) that relays
+requests to PreCom and adds the CORS headers. It is deliberately built so that
+running it is boring:
+
+- **Stateless and credential-blind** — no storage, no KV, no logging. Your
+  bearer token lives in your browser's localStorage and only passes *through*
+  the Worker inside each request.
+- **Not an open proxy** — the upstream is hardcoded and only an exact
+  allowlist of known PreCom endpoints (with their exact HTTP methods) is
+  forwarded. Client-supplied URLs are impossible.
+- **Browser-only** — requests are rejected unless they come from an allowed
+  `Origin` (edit `ALLOWED_ORIGINS` in `worker.js` to your own Pages origin).
+- **Junk dies at the edge** — `/api` requests without a `Bearer` header are
+  rejected before PreCom is ever contacted.
+
+Operational notes: stay on the Workers **free** plan (hard daily request cap,
+so abuse can cause at worst a day of outage, never a bill), enable 2FA on the
+Cloudflare account (whoever controls the account could modify the Worker), and
+optionally add a Cloudflare rate-limiting rule in front of it.
+
+### Deploying
+
+1. **Worker**: Cloudflare dashboard → Workers & Pages → Create → paste
+   `worker/worker.js` (or `npx wrangler deploy` from `worker/`). Set
+   `ALLOWED_ORIGINS` to your GitHub Pages origin. Note the
+   `https://precom-proxy.<you>.workers.dev` URL.
+2. **Web app**: enable GitHub Pages for this repo (Settings → Pages → Source:
+   "GitHub Actions"). The included `.github/workflows/pages.yml` publishes
+   `web/` automatically on every push that touches it.
+3. **First run**: open the Pages URL, enter the Worker URL as "Proxy URL", and
+   log in with your normal PreCom credentials. To send messages, also set your
+   sender ID (`SendBy`) under Settings — see "One-shot commands" → `message`
+   for how to find it (it is *not* your user ID and the API cannot look it up).
+
+Notes: tokens are kept in localStorage under your `github.io` origin — other
+GitHub Pages sites published from the *same GitHub account* share that origin,
+so don't publish untrusted HTML to other repos' Pages on the same account. The
+app is a starting point and covers a subset of the CLI's features; the CLI
+remains the full-featured interface.
+
 ## API reference
 
 A cached copy of the upstream Swagger 2.0 spec (`GET /Mobile/swagger/docs/v2`)
