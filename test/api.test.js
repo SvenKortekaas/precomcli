@@ -4,6 +4,7 @@ const {
   PreComError,
   parseReceivers,
   toTimeSpan,
+  toEndTimeSpan,
   parseWeekdays,
   buildSoundPayload,
   VALID_SOUNDS,
@@ -46,6 +47,14 @@ test('toTimeSpan: rejects out-of-range and non-integers', () => {
   assert.throws(() => toTimeSpan(-1), PreComError);
   assert.throws(() => toTimeSpan(8.5), PreComError);
   assert.throws(() => toTimeSpan('abc'), PreComError);
+});
+
+test('toEndTimeSpan: like toTimeSpan but 24 means end of day', () => {
+  assert.equal(toEndTimeSpan(24), '24:00:00'); // live-confirmed valid `to`
+  assert.equal(toEndTimeSpan('24'), '24:00:00');
+  assert.equal(toEndTimeSpan(17), '17:00:00');
+  assert.throws(() => toEndTimeSpan(25), PreComError);
+  assert.throws(() => toEndTimeSpan(-1), PreComError);
 });
 
 test('parseWeekdays: single and multiple days OR into a bitmask', () => {

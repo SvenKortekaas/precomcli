@@ -40,8 +40,8 @@ submenu (`0` goes back to this top-level menu instead of exiting):
   1) Send message              1) My status
   2) Message inbox             2) Mark myself available
   3) Alarm history             3) View scheduled availability (on-call)
-  4) Respond to an alarm       4) Add availability block
-  5) Receivers                 5) Remove availability block
+  4) Respond to an alarm       4) Mark not available (block hours)
+  5) Receivers                 5) Clear not-available markings
   6) Message templates         6) Add recurring schedule
   0) Back                      7) Set outside-region status
                                 8) Update alert sounds
@@ -190,20 +190,26 @@ either mode.
 - `respond-alarm <msgInID> <yes|no>` — responds to an alarm
   (`SetAvailabilityForAlarmMessage`) with whether you're coming. Get the
   `msgInID` from `alarms`.
-- `available` — marks you as available right now (`SetAvailable`), clearing
-  the immediate "not available" toggle.
+- `available` — makes you available right now: clears the manual "not
+  available" toggle (`SetAvailable`) and, when your schedule has you marked
+  not-available, also clears those markings for the rest of today
+  (`DeleteUserSchedulerAppointment`). `SetAvailable` alone does nothing for
+  schedule-driven unavailability — confirmed live.
 - `schedule` — lists your scheduled availability (on-call) blocks
   (`GetUserSchedulerAppointments`), defaulting to the next 7 days. You are
   *available* while one of these blocks is active, and `status` reports
   "Not available: yes" when none is (and the manual toggle isn't set) —
   PreCom's own swagger mislabels these blocks as unavailability, but live
   testing confirmed the opposite.
-- `schedule-add <date> <fromHour> <toHour>` — adds an availability (on-call)
-  block for one day (`AddUserSchedulerAppointment`), e.g.
-  `schedule-add 2026-08-01 9 17`. Whole hours only.
-- `schedule-remove <date> <fromHour> <toHour>` — removes an availability
-  block (`DeleteUserSchedulerAppointment`) with the exact same date/hours it
-  was added with, making you unavailable during those hours.
+- `schedule-add <date> <fromHour> <toHour>` — marks you NOT available for
+  that range (`AddUserSchedulerAppointment` — despite its name, it punches a
+  hole in your availability timeline; confirmed live), e.g.
+  `schedule-add 2026-08-01 9 17`. Whole hours only; use 24 as `<toHour>` for
+  midnight. Note: any write rounds that day's existing blocks to whole hours.
+- `schedule-remove <date> <fromHour> <toHour>` — clears not-available
+  markings in that range (`DeleteUserSchedulerAppointment`), so your
+  scheduled availability there returns. It's a range operation, not an
+  exact-match delete — any range works.
 - `capcodes` — lists your capcodes (physical/virtual pagers) and whether
   each is enabled (`GetUserCapcodes`).
 - `capcode-toggle <capcodeId> (--enable|--disable)` — enables or disables one

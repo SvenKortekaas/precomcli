@@ -183,12 +183,6 @@ function renderCapcodes(capcodes, { json = false } = {}) {
   ]);
 }
 
-function renderSchedulerAppointmentPicker(appointments) {
-  appointments.forEach((a, i) => {
-    console.log(`  ${i + 1}) ${shortTimestamp(a.Start)} for ${a.Duration}`);
-  });
-}
-
 function renderCapcodePicker(capcodes) {
   capcodes.forEach((c, i) => {
     console.log(`  ${i + 1}) ${c.CapcodeId} - ${c.Description} (currently ${c.Enable ? 'enabled' : 'disabled'})`);
@@ -344,7 +338,6 @@ module.exports = {
   renderMessages,
   renderAlarmMessages,
   renderSchedulerAppointments,
-  renderSchedulerAppointmentPicker,
   renderCapcodes,
   renderCapcodePicker,
   renderDaysNoOccupancy,

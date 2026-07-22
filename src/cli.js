@@ -5,6 +5,7 @@ const {
   DEFAULT_BASE_URL,
   parseReceivers,
   toTimeSpan,
+  toEndTimeSpan,
   parseWeekdays,
   buildSoundPayload,
   VALID_SOUNDS,
@@ -81,8 +82,12 @@ PRECOM_SEND_BY, and it's cached in ~/.precomcli/config.json after that.
 "alarms" defaults to your most recent alarm; pass --msg-in-id with a
 negative/positive --previous-or-next to page backward/forward from it.
 "schedule-add"/"schedule-remove" take whole hours only (e.g. "8", not
-"8:30"). Schedule blocks are AVAILABILITY (on-call) hours: "add" marks
-you on-call for those hours, "remove" makes you unavailable for them.
+"8:30"; use 24 as <toHour> for midnight). The blocks "schedule" lists
+are your AVAILABILITY (on-call) hours, but the write commands work on
+NOT-available markings: "schedule-add" marks you NOT available for that
+range (punches a hole in your availability), "schedule-remove" clears
+such markings so your availability there returns. Note: any write also
+rounds that day's existing blocks to whole hours server-side.
 
 "schedule-recurring" only guarantees --weekly 1 (every week) and 2
 (alternating, starting this week) - PreCom's own docs say other values
@@ -287,8 +292,12 @@ async function cmdRespondAlarm(args) {
 }
 
 async function cmdAvailable() {
-  await authed().client.setAvailable();
-  console.log('You are now marked as available.');
+  const actions = await authed().client.makeAvailable();
+  if (actions.length === 0) {
+    console.log('You were already available — nothing to change.');
+  } else {
+    console.log(`Done (${actions.join('; ')}). You are now marked as available.`);
+  }
 }
 
 async function cmdSchedule(args) {
@@ -308,8 +317,8 @@ async function cmdScheduleAdd(args) {
   if (!date || from === undefined || to === undefined) {
     throw new Error('Usage: precomcli schedule-add <date> <fromHour> <toHour>');
   }
-  await authed().client.addUserSchedulerAppointment(date, toTimeSpan(from), toTimeSpan(to));
-  console.log(`Added availability (on-call) block on ${date}, ${from}:00-${to}:00.`);
+  await authed().client.addUserSchedulerAppointment(date, toTimeSpan(from), toEndTimeSpan(to));
+  console.log(`Marked NOT available on ${date}, ${from}:00-${to}:00.`);
 }
 
 async function cmdScheduleRemove(args) {
@@ -317,8 +326,8 @@ async function cmdScheduleRemove(args) {
   if (!date || from === undefined || to === undefined) {
     throw new Error('Usage: precomcli schedule-remove <date> <fromHour> <toHour>');
   }
-  await authed().client.deleteUserSchedulerAppointment(date, toTimeSpan(from), toTimeSpan(to));
-  console.log(`Removed availability block on ${date}, ${from}:00-${to}:00 — you are unavailable during those hours now.`);
+  await authed().client.deleteUserSchedulerAppointment(date, toTimeSpan(from), toEndTimeSpan(to));
+  console.log(`Cleared not-available markings on ${date}, ${from}:00-${to}:00 — your availability there is restored.`);
 }
 
 async function cmdCapcodes(args) {

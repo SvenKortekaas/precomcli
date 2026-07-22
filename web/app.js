@@ -214,6 +214,87 @@ function sectionHeader(title, onRefresh) {
 
 // ----- home -----
 
+function localDate(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// "Make me available now" — live-decoded semantics (mirrors makeAvailable in
+// src/api.js, keep in sync): SetAvailable only clears the manual toggle;
+// schedule-driven unavailability is cleared by DELETEing the not-available
+// markings from the current hour to end of day.
+function availableButton(info) {
+  return el(
+    'button',
+    {
+      class: 'primary',
+      onclick: async () => {
+        if (!confirm('Make yourself AVAILABLE for the rest of today?')) return;
+        try {
+          if (info.NotAvailable) await api('POST', '/api/User/SetAvailable');
+          const scheduledAvailable = info.NotAvailalbeScheduled ?? info.NotAvailableScheduled;
+          if (scheduledAvailable === false) {
+            await api('DELETE', '/api/User/DeleteUserSchedulerAppointment', {
+              query: {
+                date: localDate(),
+                from: `${String(new Date().getHours()).padStart(2, '0')}:00:00`,
+                to: '24:00:00',
+              },
+            });
+          }
+          notify('You are marked available for the rest of today.');
+          loadHome();
+        } catch (err) {
+          notify(err.message, true);
+        }
+      },
+    },
+    'Mark me available'
+  );
+}
+
+// Marking NOT available = ADDing a scheduler appointment for the range
+// (whole hours) — it punches a hole in the availability timeline.
+function notAvailableForm() {
+  const hoursSelect = el(
+    'select',
+    null,
+    [1, 2, 3, 4, 6, 8].map((h) => el('option', { value: String(h) }, `${h} hour${h > 1 ? 's' : ''}`)),
+    el('option', { value: 'eod' }, 'rest of today')
+  );
+  return el(
+    'div',
+    { class: 'row' },
+    hoursSelect,
+    el(
+      'button',
+      {
+        class: 'small bad-btn',
+        onclick: async () => {
+          const fromHour = new Date().getHours();
+          const toHour =
+            hoursSelect.value === 'eod' ? 24 : Math.min(fromHour + Number(hoursSelect.value), 24);
+          const label = toHour === 24 ? 'midnight' : `${toHour}:00`;
+          if (!confirm(`Mark yourself NOT available from ${fromHour}:00 until ${label} today?`)) return;
+          try {
+            await api('POST', '/api/User/AddUserSchedulerAppointment', {
+              query: {
+                date: localDate(),
+                from: `${String(fromHour).padStart(2, '0')}:00:00`,
+                to: toHour === 24 ? '24:00:00' : `${String(toHour).padStart(2, '0')}:00:00`,
+              },
+            });
+            notify(`You are NOT available until ${label}.`);
+            loadHome();
+          } catch (err) {
+            notify(err.message, true);
+          }
+        },
+      },
+      'Mark not available'
+    )
+  );
+}
+
 async function loadHome() {
   const section = document.getElementById('view-home');
   spinner(section);
@@ -243,25 +324,7 @@ async function loadHome() {
         )
       ),
       el('p', null, `Understaffed group(s): ${info.NoOccupancy ? 'yes' : 'no'}`),
-      unavailable
-        ? el(
-            'button',
-            {
-              class: 'primary',
-              onclick: async () => {
-                if (!confirm('Mark yourself as available now?')) return;
-                try {
-                  await api('POST', '/api/User/SetAvailable');
-                  notify('You are now marked as available.');
-                  loadHome();
-                } catch (err) {
-                  notify(err.message, true);
-                }
-              },
-            },
-            'Mark me available'
-          )
-        : null
+      unavailable ? availableButton(info) : notAvailableForm()
     ),
     el(
       'p',

@@ -4,6 +4,7 @@ const {
   PreComError,
   DEFAULT_BASE_URL,
   toTimeSpan,
+  toEndTimeSpan,
   parseWeekdays,
   buildSoundPayload,
   VALID_SOUNDS,
@@ -253,8 +254,12 @@ async function actionSetAvailable() {
     console.log('Cancelled.');
     return;
   }
-  await clientFromSession(data).setAvailable();
-  console.log('You are now marked as available.');
+  const actions = await clientFromSession(data).makeAvailable();
+  if (actions.length === 0) {
+    console.log('You were already available — nothing to change.');
+  } else {
+    console.log(`Done (${actions.join('; ')}). You are now marked as available.`);
+  }
 }
 
 async function actionViewSchedule() {
@@ -273,9 +278,9 @@ async function actionAddScheduleBlock() {
   requireAuth(data);
   const client = clientFromSession(data);
 
-  const date = await ask('Date to be available/on-call (YYYY-MM-DD): ');
+  const date = await ask('Date to be NOT available (YYYY-MM-DD): ');
   const fromHour = await ask('From hour (0-23): ');
-  const toHour = await ask('To hour (0-23): ');
+  const toHour = await ask('To hour (1-24, 24 = midnight): ');
   if (!date || fromHour === '' || toHour === '') {
     console.log('Cancelled.');
     return;
@@ -284,20 +289,20 @@ async function actionAddScheduleBlock() {
   let toTs;
   try {
     fromTs = toTimeSpan(fromHour);
-    toTs = toTimeSpan(toHour);
+    toTs = toEndTimeSpan(toHour);
   } catch (err) {
     console.log(`Cancelled: ${err.message}`);
     return;
   }
 
   console.log('');
-  console.log(`About to mark yourself AVAILABLE (on-call) on ${date} from ${fromHour}:00 to ${toHour}:00.`);
+  console.log(`About to mark yourself NOT AVAILABLE on ${date} from ${fromHour}:00 to ${toHour}:00.`);
   if (!(await confirm('Confirm? (y/N): '))) {
     console.log('Cancelled.');
     return;
   }
   await client.addUserSchedulerAppointment(date, fromTs, toTs);
-  console.log('Availability block added.');
+  console.log('Done — you are NOT available during that range.');
 }
 
 async function actionRemoveScheduleBlock() {
@@ -305,54 +310,37 @@ async function actionRemoveScheduleBlock() {
   requireAuth(data);
   const client = clientFromSession(data);
 
+  console.log('This clears NOT-available markings in a time range, so your scheduled');
+  console.log('availability (on-call) there returns. Current blocks for context:');
   const today = new Date().toISOString().slice(0, 10);
   const inWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const appointments = await client.getUserSchedulerAppointments(today, inWeek);
-  if (appointments.length === 0) {
-    console.log('No scheduled availability (on-call) blocks in the next 7 days.');
-    return;
-  }
-  console.log('');
-  console.log('Your scheduled availability (on-call) blocks (next 7 days):');
-  render.renderSchedulerAppointmentPicker(appointments);
-  const pick = await ask('Enter the number of the block to remove: ');
-  const selected = pickByNumber(appointments, pick, 'blocks');
-  if (!selected) return;
-  const appt = selected[0];
+  render.renderSchedulerAppointments(await client.getUserSchedulerAppointments(today, inWeek));
 
-  const start = new Date(appt.Start);
-  const date = appt.Start.slice(0, 10);
-  const fromHour = start.getHours();
-
-  // Duration is usually "hh:mm:ss" but multi-day blocks come back as
-  // "d.hh:mm:ss" (observed live: "1.00:00:00" for a full day). This tool can
-  // only safely reconstruct the from/to hours DeleteUserSchedulerAppointment
-  // needs for a clean whole-hour, single-day span - anything with a day
-  // component or non-zero minutes/seconds can't be reconstructed reliably.
-  const match = /^(?:(\d+)\.)?(\d+):(\d+):(\d+)$/.exec(appt.Duration || '');
-  if (!match || match[1] || match[3] !== '00' || match[4] !== '00') {
-    console.log(
-      `Cancelled: this block's duration (${appt.Duration}) isn't a whole-hour, single-day ` +
-        'span, so this tool cannot safely reconstruct the values needed to remove it. ' +
-        'Use the PreCom app or portal for this one.'
-    );
+  const date = await ask('Date (YYYY-MM-DD): ');
+  const fromHour = await ask('From hour (0-23): ');
+  const toHour = await ask('To hour (1-24, 24 = midnight): ');
+  if (!date || fromHour === '' || toHour === '') {
+    console.log('Cancelled.');
     return;
   }
-  const durationHours = Number(match[2]);
-  if (fromHour + durationHours > 24) {
-    console.log("Cancelled: this block spans past midnight, which this tool can't safely remove.");
+  let fromTs;
+  let toTs;
+  try {
+    fromTs = toTimeSpan(fromHour);
+    toTs = toEndTimeSpan(toHour);
+  } catch (err) {
+    console.log(`Cancelled: ${err.message}`);
     return;
   }
-  const toHour = (fromHour + durationHours) % 24;
 
   console.log('');
-  console.log(`About to remove the block on ${date} from ${fromHour}:00 to ${toHour}:00.`);
+  console.log(`About to clear not-available markings on ${date} from ${fromHour}:00 to ${toHour}:00 (you become available there).`);
   if (!(await confirm('Confirm? (y/N): '))) {
     console.log('Cancelled.');
     return;
   }
-  await client.deleteUserSchedulerAppointment(date, toTimeSpan(fromHour), toTimeSpan(toHour));
-  console.log('Availability block removed — you are unavailable during those hours now.');
+  await client.deleteUserSchedulerAppointment(date, fromTs, toTs);
+  console.log('Done — your availability in that range is restored.');
 }
 
 async function actionAddRecurringSchedule() {
@@ -713,8 +701,8 @@ const AVAILABILITY_ITEMS = [
   { key: '1', label: 'My status', action: actionStatus },
   { key: '2', label: 'Mark myself available', action: actionSetAvailable },
   { key: '3', label: 'View scheduled availability (on-call)', action: actionViewSchedule },
-  { key: '4', label: 'Add availability block', action: actionAddScheduleBlock },
-  { key: '5', label: 'Remove availability block', action: actionRemoveScheduleBlock },
+  { key: '4', label: 'Mark not available (block hours)', action: actionAddScheduleBlock },
+  { key: '5', label: 'Clear not-available markings', action: actionRemoveScheduleBlock },
   { key: '6', label: 'Add recurring schedule', action: actionAddRecurringSchedule },
   { key: '7', label: 'Set outside-region status', action: actionSetOutsideRegion },
   { key: '8', label: 'Update alert sounds', action: actionUpdateSound },

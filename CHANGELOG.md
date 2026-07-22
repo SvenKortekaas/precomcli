@@ -9,15 +9,22 @@ feature area rather than by a tagged release.
 ## [Unreleased]
 
 ### Fixed
-- **Availability was reported inverted** for accounts with an on-call roster.
-  A live A/B test against the official app (2026-07-22) proved that scheduler
-  appointments are *availability* (on-call) blocks — not unavailability, as
-  PreCom's own `GetUserSchedulerAppointments` swagger summary wrongly claims —
-  and that `NotAvailalbeScheduled` is inverted from its name (true = a
-  scheduled availability block is active, i.e. the user IS available).
-  `isNotAvailable` (CLI + web app), the `schedule`/`schedule-add`/
-  `schedule-remove` help/output text, and the menu's Availability submenu
-  labels/prompts all now reflect the real semantics.
+- **The whole availability model was decoded live (2026-07-22) and everything
+  now matches it.** Findings: `GetUserSchedulerAppointments` returns your
+  *availability* (on-call) timeline (its swagger summary claims the
+  opposite); `NotAvailalbeScheduled` is inverted from its name (true = an
+  availability block is active = you ARE available); the write endpoints are
+  *range* operations — `Add...` marks a range NOT available (punches a hole),
+  `Delete...` clears such markings (availability returns); and `SetAvailable`
+  does nothing for schedule-driven unavailability. Fixed accordingly:
+  `isNotAvailable` (CLI + web), `available` now uses the new
+  `PreComClient.makeAvailable()` composite that actually works, the web app's
+  Home gained working "Mark me available" / "Mark not available (1-8h / rest
+  of today)" actions, `schedule-add`/`schedule-remove` and the menu flows are
+  relabeled to their real not-available direction (with `24` accepted as an
+  end hour via `toEndTimeSpan`), and the menu's remove flow takes an explicit
+  range instead of picking blocks (Delete is a range-clear, not an
+  exact-match delete — the old whole-hour-only refusal is obsolete).
 
 ### Added
 - The web app now defaults to the project's shared relay (`DEFAULT_PROXY`),

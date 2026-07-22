@@ -140,20 +140,51 @@ class PreComClient {
     return this.request('POST', '/api/User/SetAvailable');
   }
 
-  // Returns [{ Start, Duration }, ...] scheduled AVAILABILITY (on-call)
-  // blocks — despite this endpoint's swagger summary claiming "unavailable
-  // appointments", live-confirmed the opposite on 2026-07-22 (see CLAUDE.md).
+  // Returns [{ Start, Duration }, ...] — your effective AVAILABILITY (on-call)
+  // timeline: blocks are when you ARE available. Despite this endpoint's
+  // swagger summary claiming "unavailable appointments", live tests on
+  // 2026-07-22 confirmed the opposite (see CLAUDE.md).
   getUserSchedulerAppointments(from, to) {
     return this.request('GET', '/api/User/GetUserSchedulerAppointments', { query: { from, to } });
   }
 
-  // date: ISO date; from/to: whole-hour TimeSpan strings, e.g. "08:00:00" (see toTimeSpan below).
+  // RANGE operation, live-decoded 2026-07-22 (see CLAUDE.md): marks the range
+  // NOT available — it punches a hole in the availability timeline above.
+  // date: ISO date; from/to: whole-hour TimeSpan strings ("08:00:00", see
+  // toTimeSpan; "24:00:00" is a valid end-of-day `to`, see toEndTimeSpan).
+  // Caution: any write normalizes that whole day's blocks to whole hours
+  // server-side (minute-precision blocks created by the app get rounded).
   addUserSchedulerAppointment(date, from, to) {
     return this.request('POST', '/api/User/AddUserSchedulerAppointment', { query: { date, from, to } });
   }
 
+  // Inverse RANGE operation: clears not-available markings in the range, so
+  // the scheduled availability there returns. Not an exact-match record
+  // delete — any range works, including one spanning several blocks/holes.
   deleteUserSchedulerAppointment(date, from, to) {
     return this.request('DELETE', '/api/User/DeleteUserSchedulerAppointment', { query: { date, from, to } });
+  }
+
+  // Composite "make me available right now": clears the manual toggle when
+  // set (SetAvailable does nothing for schedule-driven unavailability -
+  // confirmed live), and clears not-available markings from the current hour
+  // to end of day when no availability block is active. Returns a list of
+  // human-readable actions taken (empty = was already available).
+  async makeAvailable() {
+    const info = await this.getUserInfo();
+    const actions = [];
+    if (info.NotAvailable) {
+      await this.setAvailable();
+      actions.push('cleared the manual not-available toggle');
+    }
+    const scheduledAvailable = info.NotAvailalbeScheduled ?? info.NotAvailableScheduled;
+    if (scheduledAvailable === false) {
+      const now = new Date();
+      const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      await this.deleteUserSchedulerAppointment(date, toTimeSpan(now.getHours()), '24:00:00');
+      actions.push('cleared not-available markings for the rest of today');
+    }
+    return actions;
   }
 
   // Returns [{ CapcodeId, Enable, Description }, ...].
@@ -343,6 +374,13 @@ function toTimeSpan(hour) {
   return `${String(h).padStart(2, '0')}:00:00`;
 }
 
+// Like toTimeSpan but for end-of-range hours: also accepts 24 ("24:00:00",
+// end of day) - confirmed live as a valid `to` for the scheduler-appointment
+// range operations.
+function toEndTimeSpan(hour) {
+  return Number(hour) === 24 ? '24:00:00' : toTimeSpan(hour);
+}
+
 // Parses "type:id[:label]" pairs (comma-separated) into Receiver objects, as
 // used by both the `message --to` flag and the interactive send-message flow.
 function parseReceivers(spec) {
@@ -366,6 +404,7 @@ module.exports = {
   DEFAULT_BASE_URL,
   parseReceivers,
   toTimeSpan,
+  toEndTimeSpan,
   parseWeekdays,
   buildSoundPayload,
   VALID_SOUNDS,
