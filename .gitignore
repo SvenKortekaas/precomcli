@@ -1,2 +1,12 @@
 node_modules/
 .claude/settings.local.json
+
+# Defensive: this project's real credentials/tokens never belong inside the
+# repo (login persists to ~/.precomcli/config.json, outside the working
+# directory, by design - see CLAUDE.md). These patterns are a backstop
+# against ever accidentally adding a stray secrets file here.
+.env
+.env.*
+*.pem
+*credentials*
+*secrets*
