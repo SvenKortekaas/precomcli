@@ -20,6 +20,10 @@ feature area rather than by a tagged release.
   labels/prompts all now reflect the real semantics.
 
 ### Added
+- The web app now defaults to the project's shared relay (`DEFAULT_PROXY`),
+  so users just open the site and log in — no per-user Cloudflare Worker
+  needed. Self-hosters can still override the proxy URL via the login
+  screen's "Advanced" section or Settings.
 - Web app (PWA) in `web/` — a browser/mobile version of the tool (status +
   availability, alarms with per-alarm response, message inbox/sending, capcode
   management), installable to the home screen on iOS/Android. Published to

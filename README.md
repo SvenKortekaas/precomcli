@@ -296,19 +296,32 @@ so abuse can cause at worst a day of outage, never a bill), enable 2FA on the
 Cloudflare account (whoever controls the account could modify the Worker), and
 optionally add a Cloudflare rate-limiting rule in front of it.
 
-### Deploying
+### Using it
 
-1. **Worker**: Cloudflare dashboard → Workers & Pages → Create → paste
-   `worker/worker.js` (or `npx wrangler deploy` from `worker/`). Set
-   `ALLOWED_ORIGINS` to your GitHub Pages origin. Note the
-   `https://precom-proxy.<you>.workers.dev` URL.
-2. **Web app**: enable GitHub Pages for this repo (Settings → Pages → Source:
-   "GitHub Actions"). The included `.github/workflows/pages.yml` publishes
-   `web/` automatically on every push that touches it.
-3. **First run**: open the Pages URL, enter the Worker URL as "Proxy URL", and
-   log in with your normal PreCom credentials. To send messages, also set your
-   sender ID (`SendBy`) under Settings — see "One-shot commands" → `message`
-   for how to find it (it is *not* your user ID and the API cannot look it up).
+Open <https://svenkortekaas.github.io/precomcli/> and log in with your normal
+PreCom credentials — that's it. The app talks to PreCom through the project's
+shared relay by default (`DEFAULT_PROXY` in `web/app.js`), and because the
+relay is stateless, one deployment serves every user: your token only ever
+passes *through* it inside your own requests. To send messages, also set your
+sender ID (`SendBy`) under Settings — see "One-shot commands" → `message` for
+how to find it (it is *not* your user ID and the API cannot look it up).
+
+On a phone, use "Add to Home Screen" (iOS Safari) / "Install app" (Android
+Chrome) to get it as an app icon.
+
+### Self-hosting (optional)
+
+If you'd rather not route your traffic through the shared relay — or you fork
+this repo — deploy your own copy:
+
+1. **Worker**: Cloudflare dashboard → Workers & Pages → Create → import this
+   repo (root directory `worker`, deploy command `npx wrangler deploy`) or
+   paste `worker/worker.js`. Set `ALLOWED_ORIGINS` to your own Pages origin.
+2. **Web app**: enable GitHub Pages on your fork (Settings → Pages → Source:
+   "GitHub Actions"); `.github/workflows/pages.yml` publishes `web/` on every
+   push that touches it. Point `DEFAULT_PROXY` in `web/app.js` at your Worker
+   — or leave the code untouched and enter your Worker URL under "Advanced"
+   on the login screen (also in Settings).
 
 Notes: tokens are kept in localStorage under your `github.io` origin — other
 GitHub Pages sites published from the *same GitHub account* share that origin,

@@ -22,18 +22,22 @@
   <main id="views">
     <section id="view-login" hidden>
       <h2>Log in</h2>
-      <p class="hint">Your credentials go straight to PreCom through your own
-        proxy. This app stores nothing on any server.</p>
+      <p class="hint">Log in with your normal PreCom account. Credentials go
+        straight to PreCom through this project's relay — nothing is stored on
+        any server.</p>
       <form id="login-form">
-        <label>Proxy URL
-          <input type="url" id="login-proxy" placeholder="https://precom-proxy.YOU.workers.dev" required>
-        </label>
         <label>Username
           <input type="text" id="login-username" autocomplete="username" autocapitalize="none" required>
         </label>
         <label>Password
           <input type="password" id="login-password" autocomplete="current-password" required>
         </label>
+        <details>
+          <summary>Advanced: use a self-hosted relay</summary>
+          <label>Proxy URL
+            <input type="url" id="login-proxy" placeholder="https://your-own.workers.dev">
+          </label>
+        </details>
         <button type="submit" class="primary">Log in</button>
       </form>
     </section>

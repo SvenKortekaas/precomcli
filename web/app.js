@@ -19,8 +19,22 @@ const store = {
   del: (key) => localStorage.removeItem(`precomcli.${key}`),
 };
 
+// The project's shared relay (worker/worker.js) - stateless and
+// credential-blind, so one deployment serves every user. Users only override
+// this (login form's Advanced section / Settings) to self-host their own.
+// Keep this constant in sync with the actual deployed Worker URL.
+const DEFAULT_PROXY = 'https://precomcli.frosty-lake-b494.workers.dev';
+
 function proxyBase() {
-  return (store.get('proxy') || '').trim().replace(/\/+$/, '');
+  return (store.get('proxy') || DEFAULT_PROXY).trim().replace(/\/+$/, '');
+}
+
+// Store an override only when it differs from the default, so everyone else
+// automatically follows if the default ever changes.
+function setProxy(value) {
+  const cleaned = (value || '').trim().replace(/\/+$/, '');
+  if (cleaned && cleaned !== DEFAULT_PROXY) store.set('proxy', cleaned);
+  else store.del('proxy');
 }
 
 // ---------- API client (mirrors PreComClient in src/api.js) ----------
@@ -155,7 +169,7 @@ function clearSession() {
 }
 
 async function login(proxy, username, password) {
-  store.set('proxy', proxy.trim().replace(/\/+$/, ''));
+  setProxy(proxy);
   const data = await api('POST', '/Token', {
     form: { grant_type: 'password', username, password },
   });
@@ -575,14 +589,14 @@ function loadSettings() {
     el(
       'div',
       { class: 'card' },
-      el('label', null, 'Proxy URL', proxyInput),
+      el('label', null, 'Proxy URL — leave as-is unless you self-host the relay', proxyInput),
       el('label', null, 'Sender ID (SendBy) — needed only for sending messages', sendByInput),
       el(
         'button',
         {
           class: 'primary',
           onclick: () => {
-            store.set('proxy', proxyInput.value.trim().replace(/\/+$/, ''));
+            setProxy(proxyInput.value);
             if (sendByInput.value.trim()) store.set('sendBy', sendByInput.value.trim());
             else store.del('sendBy');
             notify('Settings saved.');
@@ -653,7 +667,8 @@ for (const button of document.querySelectorAll('#nav button')) {
   button.addEventListener('click', () => showView(button.dataset.view));
 }
 
-document.getElementById('login-proxy').value = proxyBase();
+// Only show an explicit override in the Advanced field; empty = shared relay.
+document.getElementById('login-proxy').value = store.get('proxy') || '';
 document.getElementById('login-username').value = store.get('userName') || '';
 
 if ('serviceWorker' in navigator) {
