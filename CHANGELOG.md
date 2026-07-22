@@ -26,6 +26,15 @@ feature area rather than by a tagged release.
   range instead of picking blocks (Delete is a range-clear, not an
   exact-match delete — the old whole-hour-only refusal is obsolete).
 
+### Fixed (web app)
+- Groups: member status dots were all red — `NotAvailalbeScheduled` is not
+  populated for the user objects inside `GetAllFunctions`, so availability is
+  now derived from each member's per-hour `SchedulerDays` map (plus the
+  manual `NotAvailable` toggle).
+- Alarms: the "I'm coming / Not coming" buttons now only appear within 2
+  minutes of the alarm's timestamp — responding to an old alarm isn't
+  meaningful.
+
 ### Added
 - Web app: a Groups tab — collapsible cards per group, each showing every
   role (`GetAllFunctions`) with an available/needed staffing badge and all

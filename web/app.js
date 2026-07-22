@@ -397,14 +397,30 @@ async function fillGroupFunctions(groupID, body) {
   replaceChildren(body, functions.map(functionBlock));
 }
 
+// Availability for user objects embedded in GetAllFunctions responses: their
+// NotAvailalbeScheduled flag is NOT populated there (false for everyone -
+// confirmed live 2026-07-22), so isNotAvailable() would mark the whole group
+// unavailable. Instead these objects carry SchedulerDays: a per-hour
+// availability map for the requested date (Hour<h> true = available that
+// hour - verified against a known-available account). Manual NotAvailable
+// still wins.
+function isMemberAvailable(user) {
+  if (user.NotAvailable) return false;
+  const days = user.SchedulerDays || {};
+  const key = Object.keys(days).find((k) => k.startsWith(localDate()));
+  const day = key ? days[key] : null;
+  if (!day) return false;
+  return Boolean(day[`Hour${new Date().getHours()}`]);
+}
+
 function functionBlock(fn) {
   // Available people first, then alphabetically within each status.
   const users = (fn.Users || []).slice().sort((a, b) => {
-    const availDiff = Number(isNotAvailable(a)) - Number(isNotAvailable(b));
+    const availDiff = Number(isMemberAvailable(b)) - Number(isMemberAvailable(a));
     if (availDiff !== 0) return availDiff;
     return (a.FullName || '').trim().localeCompare((b.FullName || '').trim());
   });
-  const availableCount = users.filter((u) => !isNotAvailable(u)).length;
+  const availableCount = users.filter(isMemberAvailable).length;
   const short = availableCount < (fn.NumberNeeded || 0);
   return el(
     'div',
@@ -425,7 +441,7 @@ function functionBlock(fn) {
           el(
             'p',
             { class: 'user-row' },
-            el('span', { class: isNotAvailable(u) ? 'dot bad' : 'dot good' }),
+            el('span', { class: isMemberAvailable(u) ? 'dot good' : 'dot bad' }),
             (u.FullName || '').trim() || `User ${u.UserID}`
           )
         )
@@ -437,32 +453,40 @@ function functionBlock(fn) {
 
 const alarmState = { alarms: [] };
 
+// Responding only makes sense right after dispatch — show the coming/not
+// coming buttons only within 2 minutes of the alarm's timestamp.
+const RESPOND_WINDOW_MS = 2 * 60 * 1000;
+
 function alarmCard(alarm) {
+  const ageMs = Date.now() - new Date(alarm.Timestamp).getTime();
+  const canRespond = Number.isFinite(ageMs) && ageMs <= RESPOND_WINDOW_MS;
   return el(
     'div',
     { class: 'card' },
     el('p', { class: 'meta' }, `${shortTimestamp(alarm.Timestamp)}  ·  ${alarm.Group?.Label || ''}`),
     el('p', null, alarm.Text || ''),
-    el(
-      'div',
-      { class: 'row' },
-      el(
-        'button',
-        {
-          class: 'small good-btn',
-          onclick: () => respondToAlarm(alarm, true),
-        },
-        "I'm coming"
-      ),
-      el(
-        'button',
-        {
-          class: 'small bad-btn',
-          onclick: () => respondToAlarm(alarm, false),
-        },
-        'Not coming'
-      )
-    )
+    canRespond
+      ? el(
+          'div',
+          { class: 'row' },
+          el(
+            'button',
+            {
+              class: 'small good-btn',
+              onclick: () => respondToAlarm(alarm, true),
+            },
+            "I'm coming"
+          ),
+          el(
+            'button',
+            {
+              class: 'small bad-btn',
+              onclick: () => respondToAlarm(alarm, false),
+            },
+            'Not coming'
+          )
+        )
+      : null
   );
 }
 
