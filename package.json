@@ -1,0 +1,14 @@
+{
+  "name": "precomcli",
+  "version": "0.1.0",
+  "description": "CLI for the PreCom Mobile API (pre-com.nl)",
+  "main": "src/cli.js",
+  "bin": {
+    "precomcli": "bin/precomcli.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}
