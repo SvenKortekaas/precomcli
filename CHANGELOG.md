@@ -9,6 +9,27 @@ feature area rather than by a tagged release.
 ## [Unreleased]
 
 ### Added
+- **Pager features via PreCom's newer `app.pre-com.nl` API** (a separate login
+  realm the tool didn't use before). `login` now also signs into it with the
+  same credentials (best-effort — if the account isn't provisioned there, the
+  pager features just report unavailable). New across CLI, interactive menu, and
+  web app:
+  - **Find my pager** (`pager` / menu "Pager → Find my pager" / web "Pager" tab)
+    — physical-device status: online/offline, battery, signal, serial, firmware,
+    last-seen timestamps (`GetPagerInfo`).
+  - **Beep my pager** (`beep-pager` / "Beep my pager") — pages your own device
+    so it sounds, to locate it (`SendMessageToMyself`).
+  - **Provider status** (`providers` / "Provider status") — network-provider
+    `% online` (`GetProviderInformation`).
+  - **Service functions** (`service-functions <groupId>` / Groups → "Service
+    functions") — a group's roles with assigned users and occupancy day-totals
+    (`GetAllServiceFunctions`).
+
+  The web app reaches this second realm through a new `/app` route in the
+  Cloudflare Worker (`worker/worker.js` now proxies two hardcoded upstreams);
+  **self-hosters must redeploy the Worker** for the web Pager tab to work. That
+  realm's `/Token` is a custom endpoint returning the token as a raw string (not
+  OAuth JSON) — handled by the new `loginAppRealm` in `src/api.js`.
 - **Auto-detect the `SendBy` sender ID** when you don't know it. The `SendBy`
   ID is a PreCom-internal identifier that isn't your user ID and can't be
   looked up via the API, which previously meant non-technical users couldn't

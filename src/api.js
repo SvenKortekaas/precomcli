@@ -1,4 +1,8 @@
 const DEFAULT_BASE_URL = 'https://pre-com.nl/Mobile';
+// The newer, SEPARATE PreCom API host (its own auth realm - tokens are not
+// interchangeable with DEFAULT_BASE_URL's). Home of the pager/provider
+// endpoints the Mobile API lacks. See CLAUDE.md's "app.pre-com.nl" notes.
+const APP_BASE_URL = 'https://app.pre-com.nl';
 
 class PreComError extends Error {
   constructor(message, status, body) {
@@ -29,6 +33,35 @@ class PreComClient {
     }
     this.token = data.access_token;
     return data; // { access_token, token_type, expires_in, userName, .issued, .expires }
+  }
+
+  // Login for the app.pre-com.nl realm. Its /Token is a CUSTOM controller, not
+  // the Mobile API's OWIN OAuth: same form body, but it returns the bearer
+  // token as a RAW STRING body (no JSON, no access_token field, no expires_in)
+  // and 401s with ProblemDetails on bad credentials. Proven live by the
+  // precom-homeassistant project (token = response text). Handles the raw-token,
+  // quoted-string, and (defensively) JSON-object shapes. Returns the token.
+  async loginAppRealm(username, password) {
+    const res = await fetch(`${this.baseUrl}/Token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'password', username, password }).toString(),
+    });
+    const text = (await res.text()).trim();
+    if (!res.ok || !text) {
+      throw new PreComError(`app.pre-com.nl login failed (HTTP ${res.status})`, res.status);
+    }
+    let token = text;
+    if (text.startsWith('{')) {
+      try {
+        token = JSON.parse(text).access_token || token;
+      } catch {
+        // not JSON after all - fall through to the raw string
+      }
+    }
+    token = token.replace(/^"+|"+$/g, ''); // some deployments quote the token
+    this.token = token;
+    return token;
   }
 
   // auth: set false for the handful of endpoints that work without a bearer
@@ -269,6 +302,37 @@ class PreComClient {
     return this.request('GET', '/api/v2/Information/GetInformation');
   }
 
+  // ---- app.pre-com.nl realm ----
+  // These four endpoints exist ONLY on the newer app.pre-com.nl API (a separate
+  // auth realm - a pre-com.nl/Mobile token 401s there and vice-versa), so they
+  // must be called on a client constructed with baseUrl: APP_BASE_URL and a
+  // token from logging in against that host. See CLAUDE.md's "app.pre-com.nl"
+  // notes. They're methods on the same class only so both realms share request().
+
+  // "Find my pager": physical-device telemetry - { Offline, BatteryCharge,
+  // SignalStrength, SerialNumber, FirmwareVersion, GSMType, LastDisconnected,
+  // RegisterTimestampUTC, LatestProgrammingUTC, LastCancelLocationUTC, PagerID }.
+  getPagerInfo() {
+    return this.request('GET', '/api/v2/Pager/GetPagerInfo');
+  }
+
+  // Network provider health: [{ Name, PercentageOnline }, ...].
+  getProviderInformation() {
+    return this.request('GET', '/api/v2/Information/GetProviderInformation');
+  }
+
+  // Per-group service functions (roles) with occupancy day-totals:
+  // [{ ServiceFunctionID, Label, NumberNeeded, NoOccupancy, OccupancyDays, DayTotals, Users }, ...].
+  getAllServiceFunctions(groupId) {
+    return this.request('GET', '/api/v2/Group/GetAllServiceFunctions', { query: { groupId } });
+  }
+
+  // Sends a page to the user's OWN device - the "beep my pager so I can find
+  // it" action. `message` is a query-string param (not a JSON body).
+  sendMessageToMyself(message) {
+    return this.request('POST', '/api/v2/PreComMessage/SendMessageToMyself', { query: { message } });
+  }
+
   // Returns the current/first active group change (temporary reassignment to a different group).
   getGroupChange() {
     return this.request('GET', '/api/User/GetGroupChange');
@@ -432,6 +496,7 @@ module.exports = {
   PreComClient,
   PreComError,
   DEFAULT_BASE_URL,
+  APP_BASE_URL,
   parseReceivers,
   toTimeSpan,
   toEndTimeSpan,

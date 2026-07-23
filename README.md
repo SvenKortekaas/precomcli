@@ -25,15 +25,16 @@ Session: not logged in
   3) Availability
   4) Groups
   5) Capcodes
-  6) Group changes
-  7) Node info
-  8) Reset password
-  9) Log out
+  6) Pager
+  7) Group changes
+  8) Node info
+  9) Reset password
+  10) Log out
   0) Exit
 ```
 
-`Messages`, `Availability`, `Groups`, `Capcodes`, and `Group changes` open a
-submenu (`0` goes back to this top-level menu instead of exiting):
+`Messages`, `Availability`, `Groups`, `Capcodes`, `Pager`, and `Group changes`
+open a submenu (`0` goes back to this top-level menu instead of exiting):
 
 ```
 === Messages ===             === Availability ===
@@ -52,7 +53,12 @@ submenu (`0` goes back to this top-level menu instead of exiting):
   4) Understaffed days         1) View capcodes
   5) Group functions           2) Enable/disable a capcode
   6) On-call schedule          0) Back
-  0) Back
+  7) Service functions
+     (roles + occupancy)     === Pager ===
+  0) Back                      1) Find my pager (status)
+                                2) Beep my pager
+                                3) Provider status
+                                0) Back
                               === Group changes ===
                                 1) View my group changes
                                 2) Add a group change
@@ -127,6 +133,10 @@ node bin/precomcli.js group-change-delete
 node bin/precomcli.js group-change-delete-one <groupUserId>
 node bin/precomcli.js piket-schedule <groupId> [--from <date>] [--to <date>] [--json]
 node bin/precomcli.js shifts [--json]
+node bin/precomcli.js pager [--json]
+node bin/precomcli.js beep-pager [--text <message>]
+node bin/precomcli.js providers [--json]
+node bin/precomcli.js service-functions <groupId> [--json]
 ```
 
 Or install it as a global command:
@@ -278,6 +288,20 @@ either mode.
   for why.
 - `shifts` — views your shift-work record (`GetShiftAppointments`).
   **Read-only** for the same reason as `piket-schedule`.
+- `pager` — **find my pager**: your physical device's status (online/offline,
+  battery, signal, serial, last-seen timestamps). Uses PreCom's newer
+  `app.pre-com.nl` API (`GetPagerInfo`).
+- `beep-pager [--text <message>]` — pages your **own** device so it beeps, to
+  locate it (`SendMessageToMyself`; default text "Find my pager").
+- `providers` — network-provider health (`GetProviderInformation`, `% online`).
+- `service-functions <groupId>` — a group's roles with assigned users and
+  occupancy day-totals (`GetAllServiceFunctions`).
+
+  These four live on PreCom's separate `app.pre-com.nl` service (its own login
+  realm — a Mobile-API token doesn't work there and vice-versa). `login` signs
+  into it automatically with the **same** username/password; if your account
+  isn't provisioned there, these four report that they're unavailable rather
+  than failing cryptically.
 
 ## Web app (PWA)
 
@@ -288,7 +312,8 @@ overview showing every role (function) with everyone's live status and an
 available/needed staffing badge (tap a member for their details — status,
 roles, today's hour-by-hour availability — and to send them a direct
 message), alarm history with per-alarm response,
-message inbox + sending, and capcode management. It installs to the home screen on iOS and Android
+message inbox + sending, capcode management, and a **Pager** tab (find-my-pager
+device status, a "beep my pager" button, and network-provider health). It installs to the home screen on iOS and Android
 ("Add to Home Screen" / "Install app") and then looks and behaves like an app
 — no app store, no Mac, no Xcode.
 
@@ -303,9 +328,10 @@ running it is boring:
 - **Stateless and credential-blind** — no storage, no KV, no logging. Your
   bearer token lives in your browser's localStorage and only passes *through*
   the Worker inside each request.
-- **Not an open proxy** — the upstream is hardcoded and only an exact
-  allowlist of known PreCom endpoints (with their exact HTTP methods) is
-  forwarded. Client-supplied URLs are impossible.
+- **Not an open proxy** — the two upstreams (the Mobile API, plus
+  `app.pre-com.nl` for the pager features, reached via an `/app` path prefix)
+  are hardcoded and only an exact allowlist of known PreCom endpoints (with
+  their exact HTTP methods) is forwarded. Client-supplied URLs are impossible.
 - **Browser-only** — requests are rejected unless they come from an allowed
   `Origin` (edit `ALLOWED_ORIGINS` in `worker.js` to your own Pages origin).
 - **Junk dies at the edge** — `/api` requests without a `Bearer` header are

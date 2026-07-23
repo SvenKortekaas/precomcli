@@ -46,10 +46,13 @@ class ApiError extends Error {
   }
 }
 
-async function api(method, path, { query, body, form } = {}) {
+// `app: true` routes to the separate app.pre-com.nl realm (pager/provider
+// endpoints) via the Worker's /app prefix, using the app-realm token. See
+// worker/worker.js and CLAUDE.md's app.pre-com.nl notes.
+async function api(method, path, { query, body, form, app } = {}) {
   const base = proxyBase();
   if (!base) throw new ApiError('No proxy URL configured. Open Settings.', 0);
-  let url = base + path;
+  let url = base + (app ? '/app' : '') + path;
   if (query) {
     const qs = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) {
@@ -59,7 +62,7 @@ async function api(method, path, { query, body, form } = {}) {
     if (qsStr) url += `?${qsStr}`;
   }
   const headers = {};
-  const token = store.get('token');
+  const token = app ? store.get('appToken') : store.get('token');
   if (token && path !== '/Token') headers.Authorization = `Bearer ${token}`;
   let payload;
   if (form) {
@@ -85,7 +88,9 @@ async function api(method, path, { query, body, form } = {}) {
     }
   }
   if (!res.ok) {
-    if (res.status === 401 && path !== '/Token' && store.get('token')) {
+    // Only a Mobile-realm 401 ends the session; an app-realm 401 (expired pager
+    // token) must not log the user out of the main app.
+    if (res.status === 401 && path !== '/Token' && !app && store.get('token')) {
       clearSession();
       showView('login');
       throw new ApiError('Session expired — log in again.', 401);
@@ -268,6 +273,7 @@ function spinner(section) {
 
 function clearSession() {
   store.del('token');
+  store.del('appToken');
   document.getElementById('header-user').textContent = '';
   document.getElementById('nav').hidden = true;
 }
@@ -279,17 +285,36 @@ async function login(proxy, username, password) {
   });
   store.set('token', data.access_token);
   store.set('userName', data.userName || username);
+  // Best-effort second login to the app.pre-com.nl realm (same credentials,
+  // separate token) so the Pager tab works. Never fail the main login on it.
+  // That realm's /Token is a custom controller returning the token as a RAW
+  // STRING body (not JSON {access_token}) — see loginAppRealm in src/api.js — so
+  // api() hands us back a string, not an object. Handle both defensively.
+  store.del('appToken');
+  try {
+    const appData = await api('POST', '/Token', {
+      form: { grant_type: 'password', username, password },
+      app: true,
+    });
+    const appToken = (typeof appData === 'string' ? appData : appData && appData.access_token || '')
+      .replace(/^"+|"+$/g, '')
+      .trim();
+    if (appToken) store.set('appToken', appToken);
+  } catch {
+    // Pager features simply stay unavailable for this account.
+  }
 }
 
 // ---------- views ----------
 
-const views = ['login', 'home', 'groups', 'alarms', 'messages', 'capcodes', 'settings'];
+const views = ['login', 'home', 'groups', 'alarms', 'messages', 'capcodes', 'pager', 'settings'];
 const loaders = {
   home: loadHome,
   groups: loadGroups,
   alarms: loadAlarms,
   messages: loadMessages,
   capcodes: loadCapcodes,
+  pager: loadPager,
   settings: loadSettings,
 };
 
@@ -963,6 +988,110 @@ async function loadCapcodes() {
           )
         )
       : el('p', { class: 'hint' }, 'No capcodes.')
+  );
+}
+
+// ----- pager (app.pre-com.nl realm) -----
+
+function kvRow(label, value) {
+  return el(
+    'div',
+    { class: 'row spread' },
+    el('span', { class: 'meta' }, label),
+    el('span', null, value === null || value === undefined || value === '' ? '—' : String(value))
+  );
+}
+
+// "Find my pager": device status + a self-page button + network provider
+// health. Lives on the app.pre-com.nl realm, so it needs the second (app)
+// token from login; if that's absent the account isn't provisioned there.
+async function loadPager() {
+  const section = document.getElementById('view-pager');
+  if (!store.get('appToken')) {
+    replaceChildren(
+      section,
+      sectionHeader('Pager'),
+      el(
+        'p',
+        { class: 'hint' },
+        'Pager features use PreCom’s app.pre-com.nl service. Your account isn’t signed in there — log out and back in to try enabling it (some accounts aren’t provisioned for it).'
+      )
+    );
+    return;
+  }
+  spinner(section);
+  let pager;
+  try {
+    pager = await api('GET', '/api/v2/Pager/GetPagerInfo', { app: true });
+  } catch (err) {
+    replaceChildren(section, sectionHeader('Pager', loadPager), errorLine(err));
+    return;
+  }
+  let providers = [];
+  try {
+    providers = (await api('GET', '/api/v2/Information/GetProviderInformation', { app: true })) || [];
+  } catch {
+    providers = [];
+  }
+
+  const hasPager = pager && (pager.PagerID != null || pager.SerialNumber);
+  const online = hasPager && !pager.Offline;
+
+  const beepButton = el(
+    'button',
+    {
+      class: 'primary',
+      onclick: async () => {
+        if (!confirm('Send a page to your own pager so it beeps?')) return;
+        try {
+          await api('POST', '/api/v2/PreComMessage/SendMessageToMyself', {
+            query: { message: 'Find my pager' },
+            app: true,
+          });
+          notify('Sent a page to your own pager.');
+        } catch (err) {
+          notify(err.message, true);
+        }
+      },
+    },
+    'Beep my pager'
+  );
+
+  replaceChildren(
+    section,
+    sectionHeader('Pager', loadPager),
+    hasPager
+      ? el(
+          'div',
+          { class: 'card' },
+          el(
+            'div',
+            { class: 'row spread' },
+            el('h3', null, pager.SerialNumber ? `Pager ${pager.SerialNumber}` : 'My pager'),
+            el('span', { class: online ? 'badge good' : 'badge bad' }, online ? 'Online' : 'Offline')
+          ),
+          kvRow('Battery charge', pager.BatteryCharge),
+          kvRow('Signal strength', pager.SignalStrength),
+          kvRow('Last disconnected', pager.LastDisconnected ? shortTimestamp(pager.LastDisconnected) : null),
+          kvRow('Registered', pager.RegisterTimestampUTC ? shortTimestamp(pager.RegisterTimestampUTC) : null),
+          kvRow('Last programmed', pager.LatestProgrammingUTC ? shortTimestamp(pager.LatestProgrammingUTC) : null),
+          kvRow('Firmware', pager.FirmwareVersion),
+          beepButton
+        )
+      : el(
+          'div',
+          { class: 'card' },
+          el('p', { class: 'hint' }, 'No pager registered to this account.'),
+          beepButton
+        ),
+    el(
+      'div',
+      { class: 'card' },
+      el('h3', null, 'Network providers'),
+      providers.length
+        ? providers.map((p) => kvRow(p.Name || 'Provider', `${p.PercentageOnline}% online`))
+        : el('p', { class: 'hint' }, 'No provider information.')
+    )
   );
 }
 

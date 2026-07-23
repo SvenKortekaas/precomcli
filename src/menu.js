@@ -3,6 +3,7 @@ const {
   PreComClient,
   PreComError,
   DEFAULT_BASE_URL,
+  APP_BASE_URL,
   toTimeSpan,
   toEndTimeSpan,
   parseWeekdays,
@@ -17,12 +18,28 @@ function clientFromSession(data) {
   return new PreComClient({ baseUrl: data.baseUrl || DEFAULT_BASE_URL, token: data.token });
 }
 
+// Client for the separate app.pre-com.nl realm (pager/provider features).
+function appClientFromSession(data) {
+  return new PreComClient({ baseUrl: APP_BASE_URL, token: data.appToken });
+}
+
 function requireAuth(data) {
   if (!data.token) {
     throw new PreComError('Not logged in. Choose "Log in" first.', 401);
   }
   if (data.expiresAt && Date.now() > data.expiresAt) {
     throw new PreComError('Session expired. Log in again.', 401);
+  }
+}
+
+// Pager/provider features need the app.pre-com.nl token from the second login.
+function requireAppAuth(data) {
+  requireAuth(data);
+  if (!data.appToken) {
+    throw new PreComError('Pager features need an app.pre-com.nl session. Log in again to enable them.', 401);
+  }
+  if (data.appExpiresAt && Date.now() > data.appExpiresAt) {
+    throw new PreComError('Pager session expired. Log in again.', 401);
   }
 }
 
@@ -39,14 +56,28 @@ async function actionLogin() {
   const client = new PreComClient({ baseUrl });
   const result = await client.login(username, password);
 
-  tempSession.save({
+  const session = {
     baseUrl,
     token: result.access_token,
     userName: result.userName,
     expiresAt: Date.now() + (result.expires_in ?? 0) * 1000,
-  });
+  };
 
-  console.log(`Logged in as ${result.userName}.`);
+  // Best-effort second login to the app.pre-com.nl realm (same credentials,
+  // separate token) so the Pager menu works. Never block the main login on it.
+  // That realm has no expires_in; reuse the Mobile window as a re-login proxy.
+  try {
+    session.appToken = await new PreComClient({ baseUrl: APP_BASE_URL }).loginAppRealm(username, password);
+    session.appExpiresAt = session.expiresAt;
+  } catch {
+    // Pager features simply stay unavailable for this account.
+  }
+
+  tempSession.save(session);
+
+  console.log(
+    `Logged in as ${result.userName}.${session.appToken ? '' : ' (Pager features unavailable for this account.)'}`
+  );
 }
 
 async function actionLogout() {
@@ -594,6 +625,44 @@ async function actionInfo() {
   render.renderInformation(info);
 }
 
+async function actionPagerInfo() {
+  const data = tempSession.load();
+  requireAppAuth(data);
+  const pager = await appClientFromSession(data).getPagerInfo();
+  render.renderPagerInfo(pager);
+}
+
+async function actionBeepPager() {
+  const data = tempSession.load();
+  requireAppAuth(data);
+  const message = (await ask('Message to send to your own pager (Enter for "Find my pager"): ')).trim() || 'Find my pager';
+  if (!(await confirm(`Send "${message}" to your own pager? (y/N): `))) {
+    console.log('Cancelled.');
+    return;
+  }
+  await appClientFromSession(data).sendMessageToMyself(message);
+  console.log('Sent a page to your own pager.');
+}
+
+async function actionProviders() {
+  const data = tempSession.load();
+  requireAppAuth(data);
+  const providers = await appClientFromSession(data).getProviderInformation();
+  render.renderProviderInformation(providers);
+}
+
+async function actionServiceFunctions() {
+  const data = tempSession.load();
+  requireAppAuth(data);
+  const groupId = await ask('Group ID: ');
+  if (!groupId) {
+    console.log('Cancelled.');
+    return;
+  }
+  const functions = await appClientFromSession(data).getAllServiceFunctions(groupId);
+  render.renderServiceFunctions(functions);
+}
+
 async function actionViewGroupChanges() {
   const data = tempSession.load();
   requireAuth(data);
@@ -737,6 +806,7 @@ const GROUPS_ITEMS = [
   { key: '4', label: 'Understaffed days', action: actionUnderstaffedDays },
   { key: '5', label: 'Group functions', action: actionGroupFunctions },
   { key: '6', label: 'On-call schedule', action: actionOnCallSchedule },
+  { key: '7', label: 'Service functions (roles + occupancy)', action: actionServiceFunctions },
 ];
 
 const CAPCODES_ITEMS = [
@@ -750,16 +820,23 @@ const GROUP_CHANGES_ITEMS = [
   { key: '3', label: 'Remove a group change', action: actionRemoveGroupChange },
 ];
 
+const PAGER_ITEMS = [
+  { key: '1', label: 'Find my pager (status)', action: actionPagerInfo },
+  { key: '2', label: 'Beep my pager', action: actionBeepPager },
+  { key: '3', label: 'Provider status', action: actionProviders },
+];
+
 const MENU_ITEMS = [
   { key: '1', label: 'Log in', action: actionLogin },
   { key: '2', label: 'Messages', action: () => runSubmenu('Messages', MESSAGES_ITEMS) },
   { key: '3', label: 'Availability', action: () => runSubmenu('Availability', AVAILABILITY_ITEMS) },
   { key: '4', label: 'Groups', action: () => runSubmenu('Groups', GROUPS_ITEMS) },
   { key: '5', label: 'Capcodes', action: () => runSubmenu('Capcodes', CAPCODES_ITEMS) },
-  { key: '6', label: 'Group changes', action: () => runSubmenu('Group changes', GROUP_CHANGES_ITEMS) },
-  { key: '7', label: 'Node info', action: actionInfo },
-  { key: '8', label: 'Reset password', action: actionResetPassword },
-  { key: '9', label: 'Log out', action: actionLogout },
+  { key: '6', label: 'Pager', action: () => runSubmenu('Pager', PAGER_ITEMS) },
+  { key: '7', label: 'Group changes', action: () => runSubmenu('Group changes', GROUP_CHANGES_ITEMS) },
+  { key: '8', label: 'Node info', action: actionInfo },
+  { key: '9', label: 'Reset password', action: actionResetPassword },
+  { key: '10', label: 'Log out', action: actionLogout },
 ];
 
 // Prints `items` with a trailing "0) <backLabel>" line, prompts for a choice,

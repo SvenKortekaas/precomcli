@@ -3,6 +3,7 @@ const {
   PreComClient,
   PreComError,
   DEFAULT_BASE_URL,
+  APP_BASE_URL,
   parseReceivers,
   toTimeSpan,
   toEndTimeSpan,
@@ -62,6 +63,10 @@ Usage:
   precomcli group-change-delete-one <groupUserId>
   precomcli piket-schedule <groupId> [--from <date>] [--to <date>] [--json]
   precomcli shifts [--json]
+  precomcli pager [--json]
+  precomcli beep-pager [--text <message>]
+  precomcli providers [--json]
+  precomcli service-functions <groupId> [--json]
   precomcli help
 
 The interactive menu keeps its login only in a temp folder for the
@@ -81,6 +86,12 @@ PRECOM_SEND_BY, and it's cached in ~/.precomcli/config.json after that.
 If you don't know it, run "message" without --send-by and press Enter at
 the prompt: it auto-detects the ID by trying 1-255 (only the correct one
 sends), showing a live counter, then caches the value it found.
+
+"pager" (find my pager - device battery/signal/online status), "beep-pager"
+(page your own device so it beeps), "providers" (network provider status)
+and "service-functions" use PreCom's newer app.pre-com.nl API, a separate
+login realm. "login" signs into it automatically with the same credentials;
+if your account isn't provisioned there these four are unavailable and say so.
 
 "alarms" defaults to your most recent alarm; pass --msg-in-id with a
 negative/positive --previous-or-next to page backward/forward from it.
@@ -166,6 +177,26 @@ function authed() {
   return { cfg, client: clientFromConfig() };
 }
 
+// Like authed(), but for the pager/provider features that live on the separate
+// app.pre-com.nl realm (its own token, obtained by the second login below).
+// A stored Mobile session isn't enough - the app token only exists after a
+// login that also reached app.pre-com.nl, so pre-app-support sessions get a
+// clear "log in again" message rather than a raw 401.
+function appAuthed() {
+  const cfg = config.load();
+  requireAuth(cfg);
+  if (!cfg.appToken) {
+    throw new PreComError(
+      'Pager features need an app.pre-com.nl session. Run "precomcli login" again to enable them.',
+      401
+    );
+  }
+  if (cfg.appExpiresAt && Date.now() > cfg.appExpiresAt) {
+    throw new PreComError('Pager session expired. Run "precomcli login" again.', 401);
+  }
+  return { cfg, appClient: new PreComClient({ baseUrl: APP_BASE_URL, token: cfg.appToken }) };
+}
+
 async function cmdLogin(args) {
   const baseUrl = args['base-url'] || process.env.PRECOM_BASE_URL || DEFAULT_BASE_URL;
   const username = args.username || process.env.PRECOM_USERNAME || (await ask('Username: '));
@@ -174,14 +205,28 @@ async function cmdLogin(args) {
   const client = new PreComClient({ baseUrl });
   const result = await client.login(username, password);
 
-  config.save({
+  const cfg = {
     baseUrl,
     token: result.access_token,
     userName: result.userName,
     expiresAt: Date.now() + (result.expires_in ?? 0) * 1000,
-  });
+  };
 
-  console.log(`Logged in as ${result.userName}. Token cached in ${config.CONFIG_FILE}`);
+  // Best-effort second login to the app.pre-com.nl realm with the SAME
+  // credentials, so pager/provider commands work. Never fail the main login on
+  // it - some accounts may not be provisioned there. That realm has no
+  // expires_in, so reuse the Mobile session's window as a re-login proxy.
+  try {
+    cfg.appToken = await new PreComClient({ baseUrl: APP_BASE_URL }).loginAppRealm(username, password);
+    cfg.appExpiresAt = cfg.expiresAt;
+  } catch {
+    // Pager features simply stay unavailable for this account.
+  }
+
+  config.save(cfg);
+
+  const pagerNote = cfg.appToken ? '' : ' (pager features unavailable for this account)';
+  console.log(`Logged in as ${result.userName}${pagerNote}. Token cached in ${config.CONFIG_FILE}`);
 }
 
 async function cmdLogout() {
@@ -553,6 +598,33 @@ async function cmdShifts(args) {
   render.renderShiftAppointments(shiftWork, { json: Boolean(args.json) });
 }
 
+// ---- app.pre-com.nl realm commands (pager / providers / service functions) ----
+
+async function cmdPager(args) {
+  const pager = await appAuthed().appClient.getPagerInfo();
+  render.renderPagerInfo(pager, { json: Boolean(args.json) });
+}
+
+async function cmdBeepPager(args) {
+  const message = args.text || args._[0] || 'Find my pager';
+  await appAuthed().appClient.sendMessageToMyself(message);
+  console.log('Sent a page to your own pager.');
+}
+
+async function cmdProviders(args) {
+  const providers = await appAuthed().appClient.getProviderInformation();
+  render.renderProviderInformation(providers, { json: Boolean(args.json) });
+}
+
+async function cmdServiceFunctions(args) {
+  const groupId = args._[0];
+  if (!groupId) {
+    throw new Error('Usage: precomcli service-functions <groupId> [--json]');
+  }
+  const functions = await appAuthed().appClient.getAllServiceFunctions(groupId);
+  render.renderServiceFunctions(functions, { json: Boolean(args.json) });
+}
+
 async function cmdGroupStatus(args) {
   const groupId = args._[0];
   if (!groupId) {
@@ -680,6 +752,18 @@ async function main() {
         break;
       case 'shifts':
         await cmdShifts(args);
+        break;
+      case 'pager':
+        await cmdPager(args);
+        break;
+      case 'beep-pager':
+        await cmdBeepPager(args);
+        break;
+      case 'providers':
+        await cmdProviders(args);
+        break;
+      case 'service-functions':
+        await cmdServiceFunctions(args);
         break;
       case 'help':
       case '--help':

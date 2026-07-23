@@ -327,6 +327,73 @@ function renderShiftAppointments(shiftWork, { json = false } = {}) {
   ]);
 }
 
+// "Find my pager" telemetry from the app.pre-com.nl Pager endpoint. Battery
+// and signal come back as raw numbers of undocumented scale, so show them
+// as-is rather than inventing a "%".
+function renderPagerInfo(pager, { json = false } = {}) {
+  if (json) {
+    console.log(JSON.stringify(pager, null, 2));
+    return;
+  }
+  if (!pager || (pager.PagerID == null && !pager.SerialNumber)) {
+    console.log('(no pager registered to this account)');
+    return;
+  }
+  printKeyValues([
+    ['Serial number', pager.SerialNumber],
+    ['Status', pager.Offline ? 'OFFLINE' : 'online'],
+    ['Battery charge', pager.BatteryCharge],
+    ['Signal strength', pager.SignalStrength],
+    ['Last disconnected', pager.LastDisconnected ? shortTimestamp(pager.LastDisconnected) : '-'],
+    ['Registered', pager.RegisterTimestampUTC ? shortTimestamp(pager.RegisterTimestampUTC) : '-'],
+    ['Last programmed', pager.LatestProgrammingUTC ? shortTimestamp(pager.LatestProgrammingUTC) : '-'],
+    ['Firmware', pager.FirmwareVersion],
+    ['Pager ID', pager.PagerID],
+  ]);
+}
+
+function renderProviderInformation(providers, { json = false } = {}) {
+  if (json) {
+    console.log(JSON.stringify(providers, null, 2));
+    return;
+  }
+  if (!providers || providers.length === 0) {
+    console.log('(no provider information)');
+    return;
+  }
+  const rows = providers.map((p) => ({ Name: p.Name, Online: `${p.PercentageOnline}%` }));
+  printTable(rows, [
+    { key: 'Name', label: 'Provider' },
+    { key: 'Online', label: 'Online' },
+  ]);
+}
+
+// GetAllServiceFunctions returns an array of ServiceFunction directly (unlike
+// renderFunctions, which digs them out of a Group object). DayTotals is an
+// occupancy-per-day map; show how many days it covers rather than dumping it.
+function renderServiceFunctions(functions, { json = false } = {}) {
+  if (json) {
+    console.log(JSON.stringify(functions, null, 2));
+    return;
+  }
+  if (!functions || functions.length === 0) {
+    console.log('(no service functions for this group)');
+    return;
+  }
+  const rows = functions.map((f) => ({
+    ID: f.ServiceFunctionID,
+    Label: f.Label,
+    Needed: f.NumberNeeded,
+    Users: (f.Users || []).map((u) => u.FullName?.trim()).filter(Boolean).join(', '),
+  }));
+  printTable(rows, [
+    { key: 'ID', label: 'ID' },
+    { key: 'Label', label: 'Function' },
+    { key: 'Needed', label: 'Needed' },
+    { key: 'Users', label: 'Assigned users' },
+  ]);
+}
+
 module.exports = {
   renderStatus,
   renderGroups,
@@ -348,6 +415,9 @@ module.exports = {
   renderGroupChangePicker,
   renderPiketSchedule,
   renderShiftAppointments,
+  renderPagerInfo,
+  renderProviderInformation,
+  renderServiceFunctions,
   receiverTypeLabel,
   occupancyLabel,
   // Exported for unit testing (both carry real logic that has bitten before).
