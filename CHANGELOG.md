@@ -15,12 +15,15 @@ feature area rather than by a tagged release.
   pager features just report unavailable). New across CLI, interactive menu, and
   web app:
   - **Find my pager** (`pager` / menu "Pager → Find my pager" / web "Pager" tab)
-    — physical-device status: online/offline, battery, signal, serial, firmware,
-    last-seen timestamps (`GetPagerInfo`).
+    — physical-device status: online/offline, battery %, signal %, serial,
+    firmware, last-seen timestamps (`GetPagerInfo`; battery/signal are 0-100,
+    shown as percentages). Only ever returns your OWN device — PreCom exposes no
+    way to see another member's pager, so it isn't in the group member view.
   - **Beep my pager** (`beep-pager` / "Beep my pager") — pages your own device
     so it sounds, to locate it (`SendMessageToMyself`).
   - **Provider status** (`providers` / "Provider status") — network-provider
-    `% online` (`GetProviderInformation`).
+    `% online` (`GetProviderInformation`). The web Pager tab hides this card when
+    every provider reports 0% (an org-wide stat many accounts have no data for).
   - **Service functions** (`service-functions <groupId>` / Groups → "Service
     functions") — a group's roles with assigned users and occupancy day-totals
     (`GetAllServiceFunctions`).

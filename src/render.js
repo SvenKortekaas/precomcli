@@ -328,8 +328,7 @@ function renderShiftAppointments(shiftWork, { json = false } = {}) {
 }
 
 // "Find my pager" telemetry from the app.pre-com.nl Pager endpoint. Battery
-// and signal come back as raw numbers of undocumented scale, so show them
-// as-is rather than inventing a "%".
+// and signal are 0-100 percentages (live-confirmed 2026-07-23: 91 / 84).
 function renderPagerInfo(pager, { json = false } = {}) {
   if (json) {
     console.log(JSON.stringify(pager, null, 2));
@@ -342,8 +341,8 @@ function renderPagerInfo(pager, { json = false } = {}) {
   printKeyValues([
     ['Serial number', pager.SerialNumber],
     ['Status', pager.Offline ? 'OFFLINE' : 'online'],
-    ['Battery charge', pager.BatteryCharge],
-    ['Signal strength', pager.SignalStrength],
+    ['Battery charge', pager.BatteryCharge == null ? '-' : `${pager.BatteryCharge}%`],
+    ['Signal strength', pager.SignalStrength == null ? '-' : `${pager.SignalStrength}%`],
     ['Last disconnected', pager.LastDisconnected ? shortTimestamp(pager.LastDisconnected) : '-'],
     ['Registered', pager.RegisterTimestampUTC ? shortTimestamp(pager.RegisterTimestampUTC) : '-'],
     ['Last programmed', pager.LatestProgrammingUTC ? shortTimestamp(pager.LatestProgrammingUTC) : '-'],

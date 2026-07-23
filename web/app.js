@@ -1070,8 +1070,8 @@ async function loadPager() {
             el('h3', null, pager.SerialNumber ? `Pager ${pager.SerialNumber}` : 'My pager'),
             el('span', { class: online ? 'badge good' : 'badge bad' }, online ? 'Online' : 'Offline')
           ),
-          kvRow('Battery charge', pager.BatteryCharge),
-          kvRow('Signal strength', pager.SignalStrength),
+          kvRow('Battery charge', pager.BatteryCharge == null ? null : `${pager.BatteryCharge}%`),
+          kvRow('Signal strength', pager.SignalStrength == null ? null : `${pager.SignalStrength}%`),
           kvRow('Last disconnected', pager.LastDisconnected ? shortTimestamp(pager.LastDisconnected) : null),
           kvRow('Registered', pager.RegisterTimestampUTC ? shortTimestamp(pager.RegisterTimestampUTC) : null),
           kvRow('Last programmed', pager.LatestProgrammingUTC ? shortTimestamp(pager.LatestProgrammingUTC) : null),
@@ -1084,14 +1084,18 @@ async function loadPager() {
           el('p', { class: 'hint' }, 'No pager registered to this account.'),
           beepButton
         ),
-    el(
-      'div',
-      { class: 'card' },
-      el('h3', null, 'Network providers'),
-      providers.length
-        ? providers.map((p) => kvRow(p.Name || 'Provider', `${p.PercentageOnline}% online`))
-        : el('p', { class: 'hint' }, 'No provider information.')
-    )
+    // Only show provider health when it carries real data. This account's API
+    // returns every network at 0% (an org-wide stat it has no data/rights for),
+    // which as a wall of "0% online" just looks broken — so hide it unless at
+    // least one provider reports a non-zero percentage.
+    providers.some((p) => Number(p.PercentageOnline) > 0)
+      ? el(
+          'div',
+          { class: 'card' },
+          el('h3', null, 'Network providers'),
+          providers.map((p) => kvRow(p.Name || 'Provider', `${p.PercentageOnline}% online`))
+        )
+      : null
   );
 }
 
