@@ -120,6 +120,36 @@ class PreComClient {
     return this.request('POST', '/api/Msg/SendMessage', { body: preComMsg });
   }
 
+  // Discover the SendBy sender ID for a user who doesn't know theirs (see
+  // CLAUDE.md: it's a PreCom-internal operator ID, not derivable from any
+  // Mobile API endpoint and not equal to UserID). A wrong SendBy makes
+  // SendMessage 500 while the correct one 200s AND actually delivers the
+  // message - so this loop's first success both sends preComMsg and reveals
+  // the ID. Because we scan ascending and the real ID is unique, exactly one
+  // real message is sent (on the winning candidate), never a duplicate.
+  // onProgress(current, max) fires before each attempt so callers can show a
+  // visible "N/255" counter. Returns { sendBy, result }; pass preComMsg WITHOUT
+  // a SendBy field (any present one is ignored/overwritten).
+  async findSendByAndSend(preComMsg, { min = 0, max = 255, onProgress } = {}) {
+    for (let candidate = min; candidate <= max; candidate++) {
+      if (onProgress) onProgress(candidate, max);
+      try {
+        const result = await this.sendMessage({ ...preComMsg, SendBy: candidate });
+        return { sendBy: candidate, result };
+      } catch (err) {
+        // A 500 is the documented "wrong sender ID" response - keep scanning.
+        // Anything else (401/403/network) is a real failure that would recur
+        // for every candidate, so surface it instead of silently trying 256x.
+        if (!(err instanceof PreComError && err.status === 500)) throw err;
+      }
+    }
+    throw new PreComError(
+      `Could not find a working sender ID in the range ${min}-${max}. ` +
+        'Your sender ID may be outside it, or sending is failing for another reason.',
+      0
+    );
+  }
+
   // Returns [{ MsgOutID, ControlID, MsgInID, Timestamp, ValidTo, Text, MsgIn }, ...].
   // controlID: omit for all, 'b' = P2000 alarm, 'f' = GPRS, 'g' = understaffing notifications.
   getMessages(controlID) {

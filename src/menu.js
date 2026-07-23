@@ -162,16 +162,22 @@ async function actionSendMessage() {
   const response = await confirm('Response required? (y/N): ');
 
   let sendBy = data.sendBy;
+  let autoDetect = false;
   if (!sendBy) {
     const answer = await ask(
-      "SendBy ID (your PreCom sender ID - NOT your user ID; see README if you don't know it): "
+      'SendBy ID (your PreCom sender ID - NOT your user ID). ' +
+        "If you don't know it, press Enter to auto-detect it (tries 0-255, sends once found): "
     );
-    sendBy = Number(answer);
-    if (!Number.isInteger(sendBy)) {
-      console.log('Cancelled: SendBy must be an integer.');
-      return;
+    if (answer.trim() === '') {
+      autoDetect = true;
+    } else {
+      sendBy = Number(answer);
+      if (!Number.isInteger(sendBy)) {
+        console.log('Cancelled: SendBy must be an integer.');
+        return;
+      }
+      tempSession.save({ ...data, sendBy });
     }
-    tempSession.save({ ...data, sendBy });
   }
 
   console.log('');
@@ -180,19 +186,34 @@ async function actionSendMessage() {
   console.log(`  Message:  ${message}`);
   console.log(`  Priority: ${priority ? 'yes' : 'no'}`);
   console.log(`  Response: ${response ? 'yes' : 'no'}`);
+  if (autoDetect) {
+    console.log("  SendBy:   auto-detect (will try 0-255 until it's found)");
+  }
   if (!(await confirm('Send this message? (y/N): '))) {
     console.log('Cancelled.');
     return;
   }
 
-  await client.sendMessage({
+  const preComMsg = {
     Message: message,
     Receivers: selected,
     Priority: priority,
     Response: response,
     ValidFrom: new Date().toISOString(),
-    SendBy: sendBy,
-  });
+  };
+
+  if (autoDetect) {
+    // Brute-force the sender ID for a user who doesn't know theirs. Only the
+    // correct SendBy succeeds, so this both finds it and sends the message.
+    const found = await client.findSendByAndSend(preComMsg, {
+      onProgress: (current, max) => process.stdout.write(`\rTrying sender ID ${current}/${max}...`),
+    });
+    process.stdout.write('\n');
+    tempSession.save({ ...tempSession.load(), sendBy: found.sendBy });
+    console.log(`Found your sender ID: ${found.sendBy} (saved for this session).`);
+  } else {
+    await client.sendMessage({ ...preComMsg, SendBy: sendBy });
+  }
   console.log(`Message sent to ${selected.length} receiver(s).`);
 }
 

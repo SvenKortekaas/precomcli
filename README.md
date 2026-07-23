@@ -166,7 +166,17 @@ either mode.
 
   **You also need a `SendBy` ID.** This is a PreCom-internal sender
   identifier — **it is not your user ID**, and there's no API call that
-  returns it, so you have to find it once yourself:
+  returns it.
+
+  **Don't know yours? Let it auto-detect.** Run `message` without
+  `--send-by` (or, in the interactive menu, pick "Send message") and press
+  Enter at the SendBy prompt. It tries every ID from 0 to 255 in turn,
+  showing a live `Trying sender ID N/255…` counter, and stops the moment
+  one works — because only your real ID actually sends the message, every
+  other value is rejected. The winning ID is then cached so it never asks
+  again. (This sends your message exactly once, on the ID that works.)
+
+  If you'd rather find it manually:
 
   1. Log into the web portal at https://portal.pre-com.nl/PreCom/Account/Login
      (separate login from the mobile app, same PreCom account).
@@ -312,9 +322,12 @@ Open <https://svenkortekaas.github.io/precomcli/> and log in with your normal
 PreCom credentials — that's it. The app talks to PreCom through the project's
 shared relay by default (`DEFAULT_PROXY` in `web/app.js`), and because the
 relay is stateless, one deployment serves every user: your token only ever
-passes *through* it inside your own requests. To send messages, also set your
-sender ID (`SendBy`) under Settings — see "One-shot commands" → `message` for
-how to find it (it is *not* your user ID and the API cannot look it up).
+passes *through* it inside your own requests. To send messages you also need
+your sender ID (`SendBy`) — but if you don't know it, just leave it blank and
+send: the app offers to auto-detect it (trying 0-255 with a live counter, only
+the correct one sends) and saves it. You can also set it under Settings — see
+"One-shot commands" → `message` for how to find it manually (it is *not* your
+user ID and the API cannot look it up).
 
 On a phone, use "Add to Home Screen" (iOS Safari — tap Share ⬆︎; iOS never
 shows an install prompt of its own, so the app shows a one-time hint) /

@@ -105,6 +105,53 @@ async function api(method, path, { query, body, form } = {}) {
   return data;
 }
 
+// Brute-force the SendBy sender ID for a user who doesn't know theirs (mirrors
+// findSendByAndSend in src/api.js — keep in sync; see CLAUDE.md for why SendBy
+// isn't derivable). Only the correct SendBy 200s AND actually sends the
+// message; wrong ones 500. Scanning ascending, exactly one real message is
+// sent (on the winning candidate). onProgress(current, max) fires before each
+// attempt for a visible counter. preComMsg must NOT include SendBy. Returns the
+// winning id (already saved to store).
+async function findSendByAndSend(preComMsg, onProgress) {
+  for (let candidate = 0; candidate <= 255; candidate++) {
+    if (onProgress) onProgress(candidate, 255);
+    try {
+      await api('POST', '/api/Msg/SendMessage', { body: { ...preComMsg, SendBy: candidate } });
+      store.set('sendBy', String(candidate));
+      return candidate;
+    } catch (err) {
+      // 500 = wrong sender ID, keep scanning; anything else is a real failure.
+      if (!(err instanceof ApiError && err.status === 500)) throw err;
+    }
+  }
+  throw new ApiError('Could not find a working sender ID (0-255). It may be outside that range.', 0);
+}
+
+// Send preComMsg (WITHOUT a SendBy field), resolving the sender ID. Uses the
+// saved SendBy if there is one; otherwise offers to auto-detect it by
+// brute-forcing 0-255. Returns true if the message was sent, false if the user
+// declined auto-detect. Throws on a real send error.
+async function sendResolvingSendBy(preComMsg) {
+  const saved = Number(store.get('sendBy'));
+  if (saved) {
+    await api('POST', '/api/Msg/SendMessage', { body: { ...preComMsg, SendBy: saved } });
+    return true;
+  }
+  const ok = confirm(
+    "You haven't set your sender ID (SendBy) yet.\n\n" +
+      'Auto-detect it now? This tries IDs 0-255 and sends your message as soon ' +
+      'as the right one is found, then saves it for next time.'
+  );
+  if (!ok) {
+    notify('Set your sender ID (SendBy) in Settings first — see the README for how to find it.', true);
+    return false;
+  }
+  await findSendByAndSend(preComMsg, (current, max) =>
+    notify(`Finding your sender ID… trying ${current}/${max}`)
+  );
+  return true;
+}
+
 // Same rule as isNotAvailable in src/render.js (keep them in sync): scheduler
 // blocks are AVAILABILITY (on-call) periods, and the typo'd
 // NotAvailalbeScheduled flag is INVERTED from its name - true means a
@@ -532,22 +579,15 @@ function openMemberModal(user, roles) {
               notify('Enter a message first.', true);
               return;
             }
-            const sendBy = Number(store.get('sendBy'));
-            if (!sendBy) {
-              notify('Set your sender ID (SendBy) in Settings first — see the README for how to find it.', true);
-              return;
-            }
             if (!confirm(`Send this message to ${name}?`)) return;
             try {
-              await api('POST', '/api/Msg/SendMessage', {
-                body: {
-                  Message: message,
-                  Receivers: [{ Type: 1, ID: user.UserID, Label: name }],
-                  Priority: false,
-                  Response: false,
-                  SendBy: sendBy,
-                },
+              const sent = await sendResolvingSendBy({
+                Message: message,
+                Receivers: [{ Type: 1, ID: user.UserID, Label: name }],
+                Priority: false,
+                Response: false,
               });
+              if (!sent) return;
               notify(`Message sent to ${name}.`);
               backdrop.remove();
             } catch (err) {
@@ -789,22 +829,15 @@ async function openSendForm(section) {
                 notify('Enter a message and pick at least one receiver.', true);
                 return;
               }
-              const sendBy = Number(store.get('sendBy'));
-              if (!sendBy) {
-                notify('Set your sender ID (SendBy) in Settings first — see the README for how to find it.', true);
-                return;
-              }
               if (!confirm(`Send to ${receivers.length} receiver(s)?`)) return;
               try {
-                await api('POST', '/api/Msg/SendMessage', {
-                  body: {
-                    Message: message,
-                    Receivers: receivers,
-                    Priority: priorityBox.checked,
-                    Response: responseBox.checked,
-                    SendBy: sendBy,
-                  },
+                const sent = await sendResolvingSendBy({
+                  Message: message,
+                  Receivers: receivers,
+                  Priority: priorityBox.checked,
+                  Response: responseBox.checked,
                 });
+                if (!sent) return;
                 notify('Message sent.');
                 replaceChildren(slot);
               } catch (err) {
@@ -890,7 +923,12 @@ function loadSettings() {
       'div',
       { class: 'card' },
       el('label', null, 'Proxy URL — leave as-is unless you self-host the relay', proxyInput),
-      el('label', null, 'Sender ID (SendBy) — needed only for sending messages', sendByInput),
+      el(
+        'label',
+        null,
+        "Sender ID (SendBy) — needed for sending messages. Don't know it? Leave blank and it's auto-detected the first time you send.",
+        sendByInput
+      ),
       el(
         'button',
         {

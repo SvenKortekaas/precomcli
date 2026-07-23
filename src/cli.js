@@ -78,6 +78,9 @@ in either mode.
 that is NOT your user ID and can't be looked up via this API; see the
 README for how to find yours. Pass it once with --send-by <id> or
 PRECOM_SEND_BY, and it's cached in ~/.precomcli/config.json after that.
+If you don't know it, run "message" without --send-by and press Enter at
+the prompt: it auto-detects the ID by trying 0-255 (only the correct one
+sends), showing a live counter, then caches the value it found.
 
 "alarms" defaults to your most recent alarm; pass --msg-in-id with a
 negative/positive --previous-or-next to page backward/forward from it.
@@ -238,30 +241,48 @@ async function cmdMessage(args) {
     throw new Error('Provide --text <message> or --template <id>.');
   }
 
-  let sendBy = args['send-by'] ?? process.env.PRECOM_SEND_BY ?? cfg.sendBy;
-  if (!sendBy) {
-    sendBy = await ask(
-      "SendBy ID (your PreCom sender ID - NOT your user ID; see README if you don't know it): "
-    );
-  }
-  sendBy = Number(sendBy);
-  if (!Number.isInteger(sendBy)) {
-    throw new Error('SendBy must be an integer. Pass --send-by <id>, set PRECOM_SEND_BY, or see README.');
-  }
-  if (sendBy !== cfg.sendBy) {
-    config.save({ ...cfg, sendBy });
-  }
-
   const preComMsg = {
     Message: message,
     Receivers: receivers,
     Priority: Boolean(args.priority),
     Response: Boolean(args.response),
     ValidFrom: args['valid-from'] || new Date().toISOString(),
-    SendBy: sendBy,
   };
 
-  const result = await client.sendMessage(preComMsg);
+  let sendBy = args['send-by'] ?? process.env.PRECOM_SEND_BY ?? cfg.sendBy;
+  let autoDetect = false;
+  if (sendBy === undefined || sendBy === null || sendBy === '') {
+    const answer = await ask(
+      'SendBy ID (your PreCom sender ID - NOT your user ID). ' +
+        "If you don't know it, press Enter to auto-detect it (tries 0-255, sends once found): "
+    );
+    if (answer.trim() === '') autoDetect = true;
+    else sendBy = answer;
+  }
+
+  let result;
+  if (autoDetect) {
+    // Brute-force the sender ID for a user who doesn't know theirs. Only the
+    // correct SendBy succeeds, so this both finds it and sends the message.
+    const found = await client.findSendByAndSend(preComMsg, {
+      onProgress: (current, max) => process.stdout.write(`\rTrying sender ID ${current}/${max}...`),
+    });
+    process.stdout.write('\n');
+    sendBy = found.sendBy;
+    result = found.result;
+    config.save({ ...cfg, sendBy });
+    console.log(`Found your sender ID: ${sendBy} (saved for next time).`);
+  } else {
+    sendBy = Number(sendBy);
+    if (!Number.isInteger(sendBy)) {
+      throw new Error('SendBy must be an integer. Pass --send-by <id>, set PRECOM_SEND_BY, or see README.');
+    }
+    if (sendBy !== cfg.sendBy) {
+      config.save({ ...cfg, sendBy });
+    }
+    result = await client.sendMessage({ ...preComMsg, SendBy: sendBy });
+  }
+
   if (args.json) {
     console.log(JSON.stringify(result, null, 2));
   } else {

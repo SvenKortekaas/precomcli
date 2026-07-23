@@ -8,6 +8,20 @@ feature area rather than by a tagged release.
 
 ## [Unreleased]
 
+### Added
+- **Auto-detect the `SendBy` sender ID** when you don't know it. The `SendBy`
+  ID is a PreCom-internal identifier that isn't your user ID and can't be
+  looked up via the API, which previously meant non-technical users couldn't
+  send messages without manually capturing it from the web portal. Now, when
+  no `SendBy` is set, `message` (CLI), the interactive menu's "Send message",
+  and the web app all offer to brute-force it: they try IDs 0-255 in turn with
+  a live `Trying sender ID N/255…` counter and stop at the first that works —
+  only the correct ID actually sends the message, so exactly one message is
+  sent, on the winning ID. The discovered value is then cached (config /
+  session / localStorage) so it's never asked again. Backed by the new
+  `PreComClient.findSendByAndSend()` (`src/api.js`), duplicated as
+  `findSendByAndSend`/`sendResolvingSendBy` in `web/app.js`.
+
 ### Fixed
 - **The whole availability model was decoded live (2026-07-22) and everything
   now matches it.** Findings: `GetUserSchedulerAppointments` returns your
