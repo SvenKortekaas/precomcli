@@ -108,13 +108,15 @@ async function api(method, path, { query, body, form } = {}) {
 // Brute-force the SendBy sender ID for a user who doesn't know theirs (mirrors
 // findSendByAndSend in src/api.js — keep in sync; see CLAUDE.md for why SendBy
 // isn't derivable). Only the correct SendBy 200s AND actually sends the
-// message; wrong ones 500. Scanning ascending, exactly one real message is
-// sent (on the winning candidate). onProgress(current, max) fires before each
+// message; wrong ones 500. Scanning ascending from 1, exactly one real message
+// is sent (on the winning candidate). onProgress(current, max) fires before each
 // attempt for a visible counter. preComMsg must NOT include SendBy. Returns the
 // winning id (already saved to store).
 async function findSendByAndSend(preComMsg, onProgress) {
-  for (let candidate = 0; candidate <= 255; candidate++) {
-    if (onProgress) onProgress(candidate, 255);
+  const min = 1;
+  const max = 255;
+  for (let candidate = min; candidate <= max; candidate++) {
+    if (onProgress) onProgress(candidate, max);
     try {
       await api('POST', '/api/Msg/SendMessage', { body: { ...preComMsg, SendBy: candidate } });
       store.set('sendBy', String(candidate));
@@ -124,32 +126,87 @@ async function findSendByAndSend(preComMsg, onProgress) {
       if (!(err instanceof ApiError && err.status === 500)) throw err;
     }
   }
-  throw new ApiError('Could not find a working sender ID (0-255). It may be outside that range.', 0);
+  throw new ApiError(`Could not find a working sender ID (${min}-${max}). It may be outside that range.`, 0);
+}
+
+// On-page overlay showing the live auto-detect counter and a clear pass/fail
+// result, so the user can see progress (255 sequential sends can take a while)
+// and whether it worked — richer than a transient toast.
+function sendByProgressModal() {
+  const counter = el('div', { class: 'sendby-counter' }, '…');
+  const barFill = el('div', { class: 'sendby-bar-fill' });
+  const status = el('p', { class: 'sendby-status' }, 'Starting…');
+  const closeBtn = el('button', { class: 'small', hidden: 'hidden' }, 'Close');
+  const backdrop = el(
+    'div',
+    { class: 'modal-backdrop' },
+    el(
+      'div',
+      { class: 'modal sendby-modal' },
+      el('h3', null, 'Finding your sender ID'),
+      counter,
+      el('div', { class: 'sendby-bar' }, barFill),
+      status,
+      closeBtn
+    )
+  );
+  closeBtn.addEventListener('click', () => backdrop.remove());
+  document.body.append(backdrop);
+  return {
+    update(current, max) {
+      counter.textContent = `${current} / ${max}`;
+      barFill.style.width = `${Math.round((current / max) * 100)}%`;
+      status.textContent = 'Trying sender IDs…';
+      status.className = 'sendby-status';
+    },
+    succeed(id) {
+      counter.textContent = `✓ ${id}`;
+      barFill.style.width = '100%';
+      barFill.className = 'sendby-bar-fill good';
+      status.textContent = `Found it! Your sender ID is ${id}. Message sent and saved.`;
+      status.className = 'sendby-status good';
+      closeBtn.hidden = false;
+    },
+    fail(message) {
+      counter.textContent = '✕';
+      barFill.className = 'sendby-bar-fill bad';
+      status.textContent = message;
+      status.className = 'sendby-status bad';
+      closeBtn.hidden = false;
+    },
+  };
 }
 
 // Send preComMsg (WITHOUT a SendBy field), resolving the sender ID. Uses the
 // saved SendBy if there is one; otherwise offers to auto-detect it by
-// brute-forcing 0-255. Returns true if the message was sent, false if the user
-// declined auto-detect. Throws on a real send error.
+// brute-forcing 1-255, showing an on-page counter and pass/fail result.
+// Returns { sent, handled }: sent = message went out; handled = the auto-detect
+// modal already reported the outcome, so the caller should NOT toast again
+// (but should still clean up its compose UI when sent).
 async function sendResolvingSendBy(preComMsg) {
   const saved = Number(store.get('sendBy'));
   if (saved) {
     await api('POST', '/api/Msg/SendMessage', { body: { ...preComMsg, SendBy: saved } });
-    return true;
+    return { sent: true, handled: false };
   }
   const ok = confirm(
     "You haven't set your sender ID (SendBy) yet.\n\n" +
-      'Auto-detect it now? This tries IDs 0-255 and sends your message as soon ' +
+      'Auto-detect it now? This tries IDs 1-255 and sends your message as soon ' +
       'as the right one is found, then saves it for next time.'
   );
   if (!ok) {
     notify('Set your sender ID (SendBy) in Settings first — see the README for how to find it.', true);
-    return false;
+    return { sent: false, handled: true };
   }
-  await findSendByAndSend(preComMsg, (current, max) =>
-    notify(`Finding your sender ID… trying ${current}/${max}`)
-  );
-  return true;
+  const progress = sendByProgressModal();
+  try {
+    const id = await findSendByAndSend(preComMsg, (current, max) => progress.update(current, max));
+    progress.succeed(id);
+    return { sent: true, handled: true };
+  } catch (err) {
+    progress.fail(err.message);
+    return { sent: false, handled: true };
+  }
 }
 
 // Same rule as isNotAvailable in src/render.js (keep them in sync): scheduler
@@ -384,7 +441,7 @@ async function loadHome() {
 
 // ----- groups (roles + everyone's status) -----
 
-const groupsState = { groups: null, loaded: {} };
+const groupsState = { groups: null };
 
 async function loadGroups() {
   const section = document.getElementById('view-groups');
@@ -405,7 +462,6 @@ async function loadGroups() {
 }
 
 function refreshGroups() {
-  groupsState.loaded = {};
   loadGroups();
 }
 
@@ -417,26 +473,31 @@ function groupCard(group) {
     el('summary', null, `${(group.Label || '').trim() || `Group ${group.GroupID}`}`),
     body
   );
+  // Re-fetch on every expand so an open group always shows current data (and a
+  // fetch interrupted by a quick close/re-open can't leave it stuck on
+  // "Loading…"). A per-details token drops stale/superseded responses.
   details.addEventListener('toggle', () => {
-    if (details.open) fillGroupFunctions(group.GroupID, body);
+    if (details.open) fillGroupFunctions(group.GroupID, body, details);
   });
   return details;
 }
 
-async function fillGroupFunctions(groupID, body) {
-  if (groupsState.loaded[groupID]) return; // fetched once per Refresh
-  groupsState.loaded[groupID] = true;
+async function fillGroupFunctions(groupID, body, details) {
+  const token = {};
+  details.fetchToken = token; // latest expand wins; older in-flight fetches are ignored
+  replaceChildren(body, el('p', { class: 'hint' }, 'Loading…'));
   let data;
   try {
     data = await api('GET', '/api/Group/GetAllFunctions', {
       query: { groupID, date: localDate() },
     });
   } catch (err) {
-    delete groupsState.loaded[groupID];
+    if (details.fetchToken !== token || !details.open) return;
     replaceChildren(body, errorLine(err));
     return;
   }
-  const functions = data.ServiceFuntions || []; // "Funtions" — PreCom's own typo
+  if (details.fetchToken !== token || !details.open) return; // superseded or closed meanwhile
+  const functions = (data && data.ServiceFuntions) || []; // "Funtions" — PreCom's own typo
   if (!functions.length) {
     replaceChildren(body, el('p', { class: 'hint' }, 'No functions/roles configured for this group.'));
     return;
@@ -581,14 +642,14 @@ function openMemberModal(user, roles) {
             }
             if (!confirm(`Send this message to ${name}?`)) return;
             try {
-              const sent = await sendResolvingSendBy({
+              const { sent, handled } = await sendResolvingSendBy({
                 Message: message,
                 Receivers: [{ Type: 1, ID: user.UserID, Label: name }],
                 Priority: false,
                 Response: false,
               });
               if (!sent) return;
-              notify(`Message sent to ${name}.`);
+              if (!handled) notify(`Message sent to ${name}.`);
               backdrop.remove();
             } catch (err) {
               notify(err.message, true);
@@ -831,14 +892,14 @@ async function openSendForm(section) {
               }
               if (!confirm(`Send to ${receivers.length} receiver(s)?`)) return;
               try {
-                const sent = await sendResolvingSendBy({
+                const { sent, handled } = await sendResolvingSendBy({
                   Message: message,
                   Receivers: receivers,
                   Priority: priorityBox.checked,
                   Response: responseBox.checked,
                 });
                 if (!sent) return;
-                notify('Message sent.');
+                if (!handled) notify('Message sent.');
                 replaceChildren(slot);
               } catch (err) {
                 notify(err.message, true);

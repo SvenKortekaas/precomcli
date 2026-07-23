@@ -166,7 +166,7 @@ async function actionSendMessage() {
   if (!sendBy) {
     const answer = await ask(
       'SendBy ID (your PreCom sender ID - NOT your user ID). ' +
-        "If you don't know it, press Enter to auto-detect it (tries 0-255, sends once found): "
+        "If you don't know it, press Enter to auto-detect it (tries 1-255, sends once found): "
     );
     if (answer.trim() === '') {
       autoDetect = true;
@@ -187,7 +187,7 @@ async function actionSendMessage() {
   console.log(`  Priority: ${priority ? 'yes' : 'no'}`);
   console.log(`  Response: ${response ? 'yes' : 'no'}`);
   if (autoDetect) {
-    console.log("  SendBy:   auto-detect (will try 0-255 until it's found)");
+    console.log("  SendBy:   auto-detect (will try 1-255 until it's found)");
   }
   if (!(await confirm('Send this message? (y/N): '))) {
     console.log('Cancelled.');

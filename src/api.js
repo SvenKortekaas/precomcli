@@ -130,7 +130,7 @@ class PreComClient {
   // onProgress(current, max) fires before each attempt so callers can show a
   // visible "N/255" counter. Returns { sendBy, result }; pass preComMsg WITHOUT
   // a SendBy field (any present one is ignored/overwritten).
-  async findSendByAndSend(preComMsg, { min = 0, max = 255, onProgress } = {}) {
+  async findSendByAndSend(preComMsg, { min = 1, max = 255, onProgress } = {}) {
     for (let candidate = min; candidate <= max; candidate++) {
       if (onProgress) onProgress(candidate, max);
       try {

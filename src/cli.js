@@ -79,7 +79,7 @@ that is NOT your user ID and can't be looked up via this API; see the
 README for how to find yours. Pass it once with --send-by <id> or
 PRECOM_SEND_BY, and it's cached in ~/.precomcli/config.json after that.
 If you don't know it, run "message" without --send-by and press Enter at
-the prompt: it auto-detects the ID by trying 0-255 (only the correct one
+the prompt: it auto-detects the ID by trying 1-255 (only the correct one
 sends), showing a live counter, then caches the value it found.
 
 "alarms" defaults to your most recent alarm; pass --msg-in-id with a
@@ -254,7 +254,7 @@ async function cmdMessage(args) {
   if (sendBy === undefined || sendBy === null || sendBy === '') {
     const answer = await ask(
       'SendBy ID (your PreCom sender ID - NOT your user ID). ' +
-        "If you don't know it, press Enter to auto-detect it (tries 0-255, sends once found): "
+        "If you don't know it, press Enter to auto-detect it (tries 1-255, sends once found): "
     );
     if (answer.trim() === '') autoDetect = true;
     else sendBy = answer;

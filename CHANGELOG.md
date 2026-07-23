@@ -14,8 +14,10 @@ feature area rather than by a tagged release.
   looked up via the API, which previously meant non-technical users couldn't
   send messages without manually capturing it from the web portal. Now, when
   no `SendBy` is set, `message` (CLI), the interactive menu's "Send message",
-  and the web app all offer to brute-force it: they try IDs 0-255 in turn with
-  a live `Trying sender ID N/255…` counter and stop at the first that works —
+  and the web app all offer to brute-force it: they try IDs 1-255 in turn with
+  a live `Trying sender ID N/255…` counter (the web app shows an on-page
+  counter with a progress bar and a clear pass/fail result) and stop at the
+  first that works —
   only the correct ID actually sends the message, so exactly one message is
   sent, on the winning ID. The discovered value is then cached (config /
   session / localStorage) so it's never asked again. Backed by the new
@@ -23,6 +25,13 @@ feature area rather than by a tagged release.
   `findSendByAndSend`/`sendResolvingSendBy` in `web/app.js`.
 
 ### Fixed
+- **Web app: expanding a group now always re-fetches its members, and can no
+  longer get stuck on "Loading…".** Previously each group's roles were fetched
+  once and cached until you hit Refresh, and an empty/failed response could
+  leave a group stuck on "Loading…" (with the cache flag set, so re-opening did
+  nothing) until a manual Refresh. Now every expand re-fetches fresh data, a
+  per-group token drops stale/superseded responses from quick open/close/re-open,
+  and the response parsing is null-safe.
 - **The whole availability model was decoded live (2026-07-22) and everything
   now matches it.** Findings: `GetUserSchedulerAppointments` returns your
   *availability* (on-call) timeline (its swagger summary claims the

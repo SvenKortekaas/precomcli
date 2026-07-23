@@ -170,7 +170,7 @@ either mode.
 
   **Don't know yours? Let it auto-detect.** Run `message` without
   `--send-by` (or, in the interactive menu, pick "Send message") and press
-  Enter at the SendBy prompt. It tries every ID from 0 to 255 in turn,
+  Enter at the SendBy prompt. It tries every ID from 1 to 255 in turn,
   showing a live `Trying sender ID N/255…` counter, and stops the moment
   one works — because only your real ID actually sends the message, every
   other value is rejected. The winning ID is then cached so it never asks
@@ -324,8 +324,8 @@ shared relay by default (`DEFAULT_PROXY` in `web/app.js`), and because the
 relay is stateless, one deployment serves every user: your token only ever
 passes *through* it inside your own requests. To send messages you also need
 your sender ID (`SendBy`) — but if you don't know it, just leave it blank and
-send: the app offers to auto-detect it (trying 0-255 with a live counter, only
-the correct one sends) and saves it. You can also set it under Settings — see
+send: the app offers to auto-detect it (trying 1-255 with an on-page live
+counter and a clear pass/fail result, only the correct one sends) and saves it. You can also set it under Settings — see
 "One-shot commands" → `message` for how to find it manually (it is *not* your
 user ID and the API cannot look it up).
 

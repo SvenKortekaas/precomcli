@@ -333,6 +333,49 @@ button.bad-btn {
   overflow-wrap: anywhere;
 }
 
+.sendby-modal {
+  text-align: center;
+}
+
+.sendby-counter {
+  font-size: 2.4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin: 0.6rem 0;
+  color: var(--text);
+}
+
+.sendby-bar {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+  margin: 0.4rem 0 0.7rem;
+}
+
+.sendby-bar-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.1s linear;
+}
+
+.sendby-bar-fill.good {
+  background: var(--good);
+}
+
+.sendby-bar-fill.bad {
+  background: var(--bad);
+}
+
+.sendby-status.good {
+  color: var(--good);
+}
+
+.sendby-status.bad {
+  color: var(--bad);
+}
+
 .hour-strip {
   display: flex;
   gap: 1px;
